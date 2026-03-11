@@ -1,0 +1,37 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Binary output folders
+bin/
+dist/
+build/
+
+# Coverage reports
+coverage.out
+*.coverprofile
+
+# Go workspace file (optional, local only)
+go.work
+go.work.sum
+
+# Logs
+*.log
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
