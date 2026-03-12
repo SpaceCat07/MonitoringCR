@@ -23,7 +23,7 @@ func InitRoutes() *gin.Engine {
 
 	api := r.Group("/api")
 	{
-		// auth 
+		// auth
 		api.POST("register", controllers.Register)
 		api.POST("login", controllers.Login)
 	}
@@ -33,8 +33,15 @@ func InitRoutes() *gin.Engine {
 	{
 		// endpoint with middleware
 		protected.GET("/cek", func(ctx *gin.Context) {
-			ctx.JSON(200, gin.H{"message" : "keren banget jwt nya udah bisa"})
+			ctx.JSON(200, gin.H{"message": "keren banget jwt nya udah bisa"})
 		})
+
+		// SPR endpoints
+		protected.POST("/spr", controllers.CreateSPR)
+		protected.GET("/spr", controllers.GetSPRs)
+		protected.GET("/spr/:id", controllers.GetSPRByID)
+		protected.PUT("/spr/:id", controllers.UpdateSPR)
+		protected.DELETE("/spr/:id", controllers.DeleteSPR)
 	}
 
 	r.GET("/oke", func(ctx *gin.Context) {

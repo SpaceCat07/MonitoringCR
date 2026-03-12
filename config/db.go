@@ -35,6 +35,7 @@ func DBConnect() (*gorm.DB, error) {
 
 	db.AutoMigrate(
 		&models.Users{},
+		&models.SPR{},
 	)
 
 	return db, nil
