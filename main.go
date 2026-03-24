@@ -3,12 +3,15 @@ package main
 import (
 	"MonCR/config"
 	"MonCR/routes"
+	"MonCR/utils"
 
 	"github.com/joho/godotenv"
 )
 
 func main() {
 	godotenv.Load()
+
+	go utils.CleanupClients()
 
 	// connect to postgres
 	postsql, err := config.DBConnect()

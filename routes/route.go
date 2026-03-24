@@ -28,8 +28,10 @@ func InitRoutes() *gin.Engine {
 		api.POST("login", controllers.Login)
 	}
 
+	// this rate limiter only works in single server only
+	// the limiter data clients are stored in server memory
 	protected := r.Group("/api")
-	protected.Use(middleware.AuthMiddleware())
+	protected.Use(middleware.AuthMiddleware(), middleware.RateLimitByUser())
 	{
 		// endpoint with middleware
 		protected.GET("/cek", func(ctx *gin.Context) {
