@@ -3,6 +3,7 @@ package controllers
 import (
 	"MonCR/config"
 	"MonCR/models"
+	"MonCR/utils"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,24 @@ func CreateSPR(c *gin.Context) {
 		return
 	}
 
+	claimsValue, exists := c.Get("claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Unauthorized",
+		})
+		return
+	}
+
+	claims, ok := claimsValue.(*utils.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Invalid token claims",
+		})
+		return
+	}
+
 	spr := models.SPR{
 		Title:                 request.Title,
 		BudgetType:            request.BudgetType,
@@ -48,6 +67,7 @@ func CreateSPR(c *gin.Context) {
 		BudgetCode:            request.BudgetCode,
 		WorkProgram:           request.WorkProgram,
 		RemainingBudget:       request.RemainingBudget,
+		CreatedBy:             claims.UserID,
 	}
 
 	if request.Status != "" {
@@ -80,8 +100,20 @@ func GetSPRs(c *gin.Context) {
 		return
 	}
 
+	pagination := utils.ParsePagination(c, 10, 100)
+
+	var total int64
+	if err := db.Model(&models.SPR{}).Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to count SPR data",
+			"details": err.Error(),
+		})
+		return
+	}
+
 	var sprs []models.SPR
-	if err := db.Find(&sprs).Error; err != nil {
+	if err := db.Preload("Creator").Order("id DESC").Offset(pagination.Offset).Limit(pagination.Limit).Find(&sprs).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   "Failed to retrieve SPR data",
@@ -90,9 +122,12 @@ func GetSPRs(c *gin.Context) {
 		return
 	}
 
+	paginationMeta := utils.BuildPaginationMeta(pagination.Offset, pagination.Limit, len(sprs), total)
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    sprs,
+		"pagination": paginationMeta,
 	})
 }
 
