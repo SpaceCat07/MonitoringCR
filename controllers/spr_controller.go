@@ -125,8 +125,8 @@ func GetSPRs(c *gin.Context) {
 	paginationMeta := utils.BuildPaginationMeta(pagination.Offset, pagination.Limit, len(sprs), total)
 
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    sprs,
+		"success":    true,
+		"data":       sprs,
 		"pagination": paginationMeta,
 	})
 }
