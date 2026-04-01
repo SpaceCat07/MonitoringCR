@@ -15,5 +15,7 @@ type SPR struct {
 	BudgetCode            string  `gorm:"type:varchar(50)" json:"budget_code"`
 	WorkProgram           string  `gorm:"type:varchar(255)" json:"work_program"`
 	RemainingBudget       float64 `gorm:"type:numeric" json:"remaining_budget"`
-	Status                string  `gorm:"type:varchar(20);default:'draft'" json:"status"`
+	Status                string  `gorm:"type:enum;default:'done'" json:"status"`
+	CreatedBy             uint    `gorm:"index" json:"created_by"`
+	Creator               *Users  `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
 }
