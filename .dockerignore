@@ -1,0 +1,10 @@
+.git
+.github
+.vscode
+uploads
+.env
+.env.*
+*.log
+*.out
+coverage.out
+node_modules
