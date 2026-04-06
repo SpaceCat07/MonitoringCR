@@ -26,6 +26,14 @@ var categoryOptions = []string{
 	"AUTORIZATION",
 }
 
+var moduleOptions = []string{
+	"FINANCE",
+	"MATERIAL MANAGEMENT",
+	"HUMAN RESOURCE",
+	"BASIS",
+	"ABAP",
+}
+
 var statusOptions = []string{
 	"ISSUED",
 	"RELEASE",
@@ -37,6 +45,7 @@ var statusOptions = []string{
 type createCRRequest struct {
 	Title          string    `json:"title" binding:"required,min=3,max=255"`
 	Description    string    `json:"description" binding:"required,min=3"`
+	Modul          string    `json:"modul" binding:"required,oneof=FINANCE 'MATERIAL MANAGEMENT' 'HUMAN RESOURCE' BASIS ABAP"`
 	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTORIZATION"`
 	Status         string    `json:"status" binding:"omitempty,oneof=ISSUED RELEASE IN_PROGRESS COMPLETE CANCEL"`
 	ReleaseDate    time.Time `json:"release_date" binding:"required"`
@@ -47,6 +56,7 @@ type createCRRequest struct {
 type updateCRRequest struct {
 	Title          string    `json:"title" binding:"required,min=3,max=255"`
 	Description    string    `json:"description" binding:"required,min=3"`
+	Modul          string    `json:"modul" binding:"required,oneof=FINANCE 'MATERIAL MANAGEMENT' 'HUMAN RESOURCE' BASIS ABAP"`
 	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTORIZATION"`
 	Status         string    `json:"status" binding:"required,oneof=ISSUED RELEASE IN_PROGRESS COMPLETE CANCEL"`
 	ReleaseDate    time.Time `json:"release_date" binding:"required"`
@@ -66,6 +76,7 @@ func GetCROptions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
+			"module_options":   moduleOptions,
 			"category_options": categoryOptions,
 			"status_options":   statusOptions,
 		},
@@ -161,6 +172,7 @@ func CreateCR(c *gin.Context) {
 	cr := models.ChangeRequest{
 		Title:          request.Title,
 		Description:    request.Description,
+		Modul:          request.Modul,
 		Category:       request.Category,
 		ReleaseDate:    request.ReleaseDate,
 		EndDate:        request.EndDate,
@@ -321,6 +333,7 @@ func UpdateCR(c *gin.Context) {
 	updates := models.ChangeRequest{
 		Title:          request.Title,
 		Description:    request.Description,
+		Modul:          request.Modul,
 		Category:       request.Category,
 		Status:         request.Status,
 		ReleaseDate:    request.ReleaseDate,

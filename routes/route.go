@@ -41,17 +41,21 @@ func InitRoutes() *gin.Engine {
 		})
 
 		// SPR endpoints
-		protected.GET("/spr/options", controllers.GetCROptions)
-		protected.POST("/spr", controllers.CreateCR)
-		protected.GET("/spr", controllers.GetCRs)
-		protected.GET("/spr/:id", controllers.GetCRByID)
-		protected.PUT("/spr/:id", controllers.UpdateCR)
-		protected.DELETE("/spr/:id", controllers.DeleteCR)
+		protected.GET("/cr/options", controllers.GetCROptions)
+		protected.GET("/cr/charts", controllers.GetCRCharts)
+		protected.POST("/cr/attachments/upload", controllers.UploadCRAttachments)
+		protected.POST("/cr", controllers.CreateCR)
+		protected.GET("/cr", controllers.GetCRs)
+		protected.GET("/cr/:id", controllers.GetCRByID)
+		protected.PUT("/cr/:id", controllers.UpdateCR)
+		protected.DELETE("/cr/:id", controllers.DeleteCR)
 	}
 
 	r.GET("/oke", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{"message": "Oke"})
 	})
+
+	r.Static("/uploads", "./uploads")
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 

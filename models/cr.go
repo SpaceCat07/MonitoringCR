@@ -10,6 +10,7 @@ type ChangeRequest struct {
 	gorm.Model
 	Title          string    `gorm:"type:varchar(255);not null" json:"title"`
 	Description    string    `gorm:"type:text;not null" json:"description"`
+	Modul          string    `gorm:"type:varchar(100);not null" json:"modul"`
 	Category       string    `gorm:"type:varchar(50);not null" json:"category"`
 	Status         string    `gorm:"type:varchar(50);not null;default:'ISSUED'" json:"status"`
 	ReleaseDate    time.Time `gorm:"not null" json:"release_date"`
