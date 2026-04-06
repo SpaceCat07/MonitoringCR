@@ -23,13 +23,21 @@ definitions:
           type: string
         minItems: 1
         type: array
+      modul:
+        enum:
+        - FINANCE
+        - MATERIAL MANAGEMENT
+        - HUMAN RESOURCE
+        - BASIS
+        - ABAP
+        type: string
       release_date:
         type: string
       status:
         enum:
         - ISSUED
         - RELEASE
-        - IN PROGRESS
+        - IN_PROGRESS
         - COMPLETE
         - CANCEL
         type: string
@@ -42,6 +50,7 @@ definitions:
     - description
     - end_date
     - file_attachment
+    - modul
     - release_date
     - title
     type: object
@@ -92,13 +101,21 @@ definitions:
           type: string
         minItems: 1
         type: array
+      modul:
+        enum:
+        - FINANCE
+        - MATERIAL MANAGEMENT
+        - HUMAN RESOURCE
+        - BASIS
+        - ABAP
+        type: string
       release_date:
         type: string
       status:
         enum:
         - ISSUED
         - RELEASE
-        - IN PROGRESS
+        - IN_PROGRESS
         - COMPLETE
         - CANCEL
         type: string
@@ -111,6 +128,7 @@ definitions:
     - description
     - end_date
     - file_attachment
+    - modul
     - release_date
     - status
     - title
@@ -121,6 +139,97 @@ info:
   title: MonitoringCR API
   version: "1.0"
 paths:
+  /api/cr/attachments/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload one or multiple files using multipart/form-data field name
+        files. Returns local URLs for file_attachment.
+      parameters:
+      - collectionFormat: csv
+        description: Attachment files
+        in: formData
+        items:
+          type: file
+        name: files
+        required: true
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upload CR attachments to local storage
+      tags:
+      - CR
+  /api/cr/charts:
+    get:
+      description: 'Return chart-ready data for pie and bar charts. Optional filters:
+        status, category, modul, from, to.'
+      parameters:
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      - description: Filter by modul
+        in: query
+        name: modul
+        type: string
+      - description: Start date (YYYY-MM-DD or RFC3339)
+        in: query
+        name: from
+        type: string
+      - description: End date (YYYY-MM-DD or RFC3339)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get CR chart analytics
+      tags:
+      - CR
   /api/login:
     post:
       consumes:

@@ -15,6 +15,141 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/cr/attachments/upload": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload one or multiple files using multipart/form-data field name files. Returns local URLs for file_attachment.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Upload CR attachments to local storage",
+                "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "file"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Attachment files",
+                        "name": "files",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/charts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Return chart-ready data for pie and bar charts. Optional filters: status, category, modul, from, to.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Get CR chart analytics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by category",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by modul",
+                        "name": "modul",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD or RFC3339)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD or RFC3339)",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/login": {
             "post": {
                 "description": "Authenticate user and return JWT token.",
@@ -430,6 +565,7 @@ const docTemplate = `{
                 "description",
                 "end_date",
                 "file_attachment",
+                "modul",
                 "release_date",
                 "title"
             ],
@@ -461,6 +597,16 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "modul": {
+                    "type": "string",
+                    "enum": [
+                        "FINANCE",
+                        "MATERIAL MANAGEMENT",
+                        "HUMAN RESOURCE",
+                        "BASIS",
+                        "ABAP"
+                    ]
+                },
                 "release_date": {
                     "type": "string"
                 },
@@ -469,7 +615,7 @@ const docTemplate = `{
                     "enum": [
                         "ISSUED",
                         "RELEASE",
-                        "IN PROGRESS",
+                        "IN_PROGRESS",
                         "COMPLETE",
                         "CANCEL"
                     ]
@@ -523,6 +669,7 @@ const docTemplate = `{
                 "description",
                 "end_date",
                 "file_attachment",
+                "modul",
                 "release_date",
                 "status",
                 "title"
@@ -555,6 +702,16 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "modul": {
+                    "type": "string",
+                    "enum": [
+                        "FINANCE",
+                        "MATERIAL MANAGEMENT",
+                        "HUMAN RESOURCE",
+                        "BASIS",
+                        "ABAP"
+                    ]
+                },
                 "release_date": {
                     "type": "string"
                 },
@@ -563,7 +720,7 @@ const docTemplate = `{
                     "enum": [
                         "ISSUED",
                         "RELEASE",
-                        "IN PROGRESS",
+                        "IN_PROGRESS",
                         "COMPLETE",
                         "CANCEL"
                     ]
