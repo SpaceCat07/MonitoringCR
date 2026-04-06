@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func InitRoutes() *gin.Engine {
@@ -39,16 +41,19 @@ func InitRoutes() *gin.Engine {
 		})
 
 		// SPR endpoints
-		protected.POST("/spr", controllers.CreateSPR)
-		protected.GET("/spr", controllers.GetSPRs)
-		protected.GET("/spr/:id", controllers.GetSPRByID)
-		protected.PUT("/spr/:id", controllers.UpdateSPR)
-		protected.DELETE("/spr/:id", controllers.DeleteSPR)
+		protected.GET("/spr/options", controllers.GetCROptions)
+		protected.POST("/spr", controllers.CreateCR)
+		protected.GET("/spr", controllers.GetCRs)
+		protected.GET("/spr/:id", controllers.GetCRByID)
+		protected.PUT("/spr/:id", controllers.UpdateCR)
+		protected.DELETE("/spr/:id", controllers.DeleteCR)
 	}
 
 	r.GET("/oke", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{"message": "Oke"})
 	})
+
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	return r
 }
