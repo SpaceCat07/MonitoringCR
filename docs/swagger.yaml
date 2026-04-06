@@ -1,0 +1,399 @@
+basePath: /
+definitions:
+  controllers.createCRRequest:
+    properties:
+      category:
+        enum:
+        - FLOW
+        - REPORT
+        - INTERFACE
+        - CONVERTION
+        - ENHANCEMENT
+        - FORM
+        - CONFIGURATION
+        - AUTORIZATION
+        type: string
+      description:
+        minLength: 3
+        type: string
+      end_date:
+        type: string
+      file_attachment:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      release_date:
+        type: string
+      status:
+        enum:
+        - ISSUED
+        - RELEASE
+        - IN PROGRESS
+        - COMPLETE
+        - CANCEL
+        type: string
+      title:
+        maxLength: 255
+        minLength: 3
+        type: string
+    required:
+    - category
+    - description
+    - end_date
+    - file_attachment
+    - release_date
+    - title
+    type: object
+  controllers.loginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  controllers.registerRequest:
+    properties:
+      email:
+        type: string
+      fullname:
+        type: string
+      password:
+        minLength: 6
+        type: string
+    required:
+    - email
+    - fullname
+    - password
+    type: object
+  controllers.updateCRRequest:
+    properties:
+      category:
+        enum:
+        - FLOW
+        - REPORT
+        - INTERFACE
+        - CONVERTION
+        - ENHANCEMENT
+        - FORM
+        - CONFIGURATION
+        - AUTORIZATION
+        type: string
+      description:
+        minLength: 3
+        type: string
+      end_date:
+        type: string
+      file_attachment:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      release_date:
+        type: string
+      status:
+        enum:
+        - ISSUED
+        - RELEASE
+        - IN PROGRESS
+        - COMPLETE
+        - CANCEL
+        type: string
+      title:
+        maxLength: 255
+        minLength: 3
+        type: string
+    required:
+    - category
+    - description
+    - end_date
+    - file_attachment
+    - release_date
+    - status
+    - title
+    type: object
+info:
+  contact: {}
+  description: API documentation for MonitoringCR.
+  title: MonitoringCR API
+  version: "1.0"
+paths:
+  /api/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return JWT token.
+      parameters:
+      - description: Login payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Login user
+      tags:
+      - Auth
+  /api/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user account.
+      parameters:
+      - description: Register payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.registerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register user
+      tags:
+      - Auth
+  /api/spr:
+    get:
+      description: Get paginated list of change requests.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List Change Requests
+      tags:
+      - CR
+    post:
+      consumes:
+      - application/json
+      description: Create a new change request.
+      parameters:
+      - description: Create CR payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.createCRRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create Change Request
+      tags:
+      - CR
+  /api/spr/{id}:
+    delete:
+      description: Delete change request by id.
+      parameters:
+      - description: CR ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete Change Request
+      tags:
+      - CR
+    get:
+      description: Retrieve one change request by id.
+      parameters:
+      - description: CR ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get Change Request by ID
+      tags:
+      - CR
+    put:
+      consumes:
+      - application/json
+      description: Fully update change request by id.
+      parameters:
+      - description: CR ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update CR payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.updateCRRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update Change Request
+      tags:
+      - CR
+  /api/spr/options:
+    get:
+      description: Get available options for CATEGORY and STATUS fields when creating/updating
+        change request.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get category and status options
+      tags:
+      - CR
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
