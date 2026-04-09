@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +24,7 @@ var categoryOptions = []string{
 	"ENHANCEMENT",
 	"FORM",
 	"CONFIGURATION",
-	"AUTORIZATION",
+	"AUTHORIZATION",
 }
 
 var moduleOptions = []string{
@@ -45,9 +46,11 @@ var statusOptions = []string{
 type createCRRequest struct {
 	Title          string    `json:"title" binding:"required,min=3,max=255"`
 	Description    string    `json:"description" binding:"required,min=3"`
+	PIC            string    `json:"pic" binding:"required,min=2,max=150"`
 	Modul          string    `json:"modul" binding:"required,oneof=FINANCE 'MATERIAL MANAGEMENT' 'HUMAN RESOURCE' BASIS ABAP"`
-	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTORIZATION"`
+	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTHORIZATION"`
 	Status         string    `json:"status" binding:"omitempty,oneof=ISSUED RELEASE IN_PROGRESS COMPLETE CANCEL"`
+	Keterangan     string    `json:"keterangan"`
 	ReleaseDate    time.Time `json:"release_date" binding:"required"`
 	EndDate        time.Time `json:"end_date" binding:"required"`
 	FileAttachment []string  `json:"file_attachment" binding:"required,min=1,dive,required"`
@@ -56,12 +59,65 @@ type createCRRequest struct {
 type updateCRRequest struct {
 	Title          string    `json:"title" binding:"required,min=3,max=255"`
 	Description    string    `json:"description" binding:"required,min=3"`
+	PIC            string    `json:"pic" binding:"required,min=2,max=150"`
 	Modul          string    `json:"modul" binding:"required,oneof=FINANCE 'MATERIAL MANAGEMENT' 'HUMAN RESOURCE' BASIS ABAP"`
-	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTORIZATION"`
+	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTHORIZATION"`
 	Status         string    `json:"status" binding:"required,oneof=ISSUED RELEASE IN_PROGRESS COMPLETE CANCEL"`
+	Keterangan     string    `json:"keterangan"`
 	ReleaseDate    time.Time `json:"release_date" binding:"required"`
 	EndDate        time.Time `json:"end_date" binding:"required"`
 	FileAttachment []string  `json:"file_attachment" binding:"required,min=1,dive,required"`
+}
+
+func requiresKeterangan(status string) bool {
+	return status == "ISSUED" || status == "CANCEL"
+}
+
+func validateKeteranganByStatus(status, keterangan string) error {
+	if requiresKeterangan(status) && strings.TrimSpace(keterangan) == "" {
+		return errors.New("keterangan is required when status is ISSUED or CANCEL")
+	}
+
+	return nil
+}
+
+func isAllowedValue(value string, allowed []string) bool {
+	for _, option := range allowed {
+		if value == option {
+			return true
+		}
+	}
+
+	return false
+}
+
+func listCRsWithFilter(c *gin.Context, field string, value string) {
+	db, ok := connectDB(c)
+	if !ok {
+		return
+	}
+
+	pagination := utils.ParsePagination(c, 10, 100)
+
+	query := db.Model(&models.ChangeRequest{}).Where(field+" = ?", value)
+
+	var total int64
+	query.Count(&total)
+
+	var crs []models.ChangeRequest
+	query.Preload("Creator").
+		Order("id DESC").
+		Offset(pagination.Offset).
+		Limit(pagination.Limit).
+		Find(&crs)
+
+	paginationMeta := utils.BuildPaginationMeta(pagination.Offset, pagination.Limit, len(crs), total)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"data":       crs,
+		"pagination": paginationMeta,
+	})
 }
 
 // GetCROptions godoc
@@ -169,22 +225,33 @@ func CreateCR(c *gin.Context) {
 		return
 	}
 
+	effectiveStatus := request.Status
+	if effectiveStatus == "" {
+		effectiveStatus = defaultCRStatus
+	}
+
+	if err := validateKeteranganByStatus(effectiveStatus, request.Keterangan); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
 	cr := models.ChangeRequest{
 		Title:          request.Title,
 		Description:    request.Description,
+		PIC:            request.PIC,
 		Modul:          request.Modul,
 		Category:       request.Category,
+		Keterangan:     request.Keterangan,
 		ReleaseDate:    request.ReleaseDate,
 		EndDate:        request.EndDate,
 		FileAttachment: request.FileAttachment,
 		CreatedBy:      claims.UserID,
 	}
 
-	if request.Status != "" {
-		cr.Status = request.Status
-	} else {
-		cr.Status = defaultCRStatus
-	}
+	cr.Status = effectiveStatus
 
 	if err := db.Create(&cr).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -333,12 +400,22 @@ func UpdateCR(c *gin.Context) {
 	updates := models.ChangeRequest{
 		Title:          request.Title,
 		Description:    request.Description,
+		PIC:            request.PIC,
 		Modul:          request.Modul,
 		Category:       request.Category,
 		Status:         request.Status,
+		Keterangan:     request.Keterangan,
 		ReleaseDate:    request.ReleaseDate,
 		EndDate:        request.EndDate,
 		FileAttachment: request.FileAttachment,
+	}
+
+	if err := validateKeteranganByStatus(request.Status, request.Keterangan); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
 	}
 
 	if err := db.Model(&models.ChangeRequest{}).Where("id = ?", id).Updates(&updates).Error; err != nil {
@@ -402,4 +479,54 @@ func DeleteCR(c *gin.Context) {
 		"success": true,
 		"message": "Change Request deleted successfully",
 	})
+}
+
+// GetCRsByStatus godoc
+// @Summary List Change Requests by status
+// @Description Get paginated list of change requests filtered by status.
+// @Tags CR
+// @Produce json
+// @Param status path string true "CR status"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/cr/status/{status} [get]
+func GetCRsByStatus(c *gin.Context) {
+	status := strings.ToUpper(strings.TrimSpace(c.Param("status")))
+
+	if !isAllowedValue(status, statusOptions) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid status value",
+		})
+		return
+	}
+
+	listCRsWithFilter(c, "status", status)
+}
+
+// GetCRsByModule godoc
+// @Summary List Change Requests by modul
+// @Description Get paginated list of change requests filtered by modul.
+// @Tags CR
+// @Produce json
+// @Param modul path string true "CR modul"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/cr/modul/{modul} [get]
+func GetCRsByModule(c *gin.Context) {
+	modul := strings.ToUpper(strings.TrimSpace(c.Param("modul")))
+
+	if !isAllowedValue(modul, moduleOptions) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid modul value",
+		})
+		return
+	}
+
+	listCRsWithFilter(c, "modul", modul)
 }
