@@ -140,7 +140,10 @@ func GetCRCharts(c *gin.Context) {
 	categoryCounts := make(map[string]int64)
 	moduleCounts := make(map[string]int64)
 	monthCounts := make(map[string]int64)
+	
+	// Pisahkan map untuk status dan category
 	statusByModule := make(map[string]map[string]int64)
+	categoryByModule := make(map[string]map[string]int64) // TAMBAHAN: Map khusus category
 
 	var activeCount int64
 	for _, r := range records {
@@ -151,10 +154,17 @@ func GetCRCharts(c *gin.Context) {
 		monthKey := r.ReleaseDate.Format("2006-01")
 		monthCounts[monthKey]++
 
+		// 1. Populate statusByModule
 		if _, exists := statusByModule[r.Modul]; !exists {
 			statusByModule[r.Modul] = map[string]int64{}
 		}
 		statusByModule[r.Modul][r.Status]++
+
+		// 2. Populate categoryByModule (TAMBAHAN LOGIKA)
+		if _, exists := categoryByModule[r.Modul]; !exists {
+			categoryByModule[r.Modul] = map[string]int64{}
+		}
+		categoryByModule[r.Modul][r.Category]++
 
 		if r.Status != "COMPLETE" && r.Status != "CANCEL" {
 			activeCount++
@@ -166,6 +176,7 @@ func GetCRCharts(c *gin.Context) {
 		moduleLabels = append(moduleLabels, module)
 	}
 
+	// Series untuk Stacked Status
 	stackedSeries := make([]chartSeries, 0, len(statusOptions))
 	for _, status := range statusOptions {
 		data := make([]int64, 0, len(moduleLabels))
@@ -173,6 +184,17 @@ func GetCRCharts(c *gin.Context) {
 			data = append(data, statusByModule[module][status])
 		}
 		stackedSeries = append(stackedSeries, chartSeries{Name: status, Data: data})
+	}
+
+	// Series untuk Stacked Category (PERBAIKAN LOGIKA)
+	stackedSeries2 := make([]chartSeries, 0, len(categoryOptions))
+	for _, category := range categoryOptions {
+		data := make([]int64, 0, len(moduleLabels))
+		for _, module := range moduleLabels {
+			// Gunakan categoryByModule, bukan statusByModule
+			data = append(data, categoryByModule[module][category]) 
+		}
+		stackedSeries2 = append(stackedSeries2, chartSeries{Name: category, Data: data})
 	}
 
 	total := int64(len(records))
@@ -202,6 +224,10 @@ func GetCRCharts(c *gin.Context) {
 				"stacked_status_by_modul": gin.H{
 					"labels": moduleLabels,
 					"series": stackedSeries,
+				},
+				"stacked_category_by_modul": gin.H{
+					"labels": moduleLabels,
+					"series": stackedSeries2,
 				},
 			},
 		},
