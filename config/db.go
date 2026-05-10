@@ -36,6 +36,8 @@ func DBConnect() (*gorm.DB, error) {
 	db.AutoMigrate(
 		&models.Users{},
 		&models.ChangeRequest{},
+		&models.Activity{},
+		&models.SubTask{},
 	)
 
 	return db, nil
