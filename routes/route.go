@@ -44,6 +44,8 @@ func InitRoutes() *gin.Engine {
 		protected.GET("/cr/options", controllers.GetCROptions)
 		protected.GET("/cr/charts", controllers.GetCRCharts)
 		protected.GET("/cr/export", controllers.ExportCRsPDF)
+		protected.GET("/cr/status/:status", controllers.GetCRsByStatus)
+		protected.GET("/cr/modul/:modul", controllers.GetCRsByModule)
 		protected.POST("/cr/attachments/upload", controllers.UploadCRAttachments)
 		protected.POST("/cr", controllers.CreateCR)
 		protected.GET("/cr", controllers.GetCRs)

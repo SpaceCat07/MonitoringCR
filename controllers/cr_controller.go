@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +25,7 @@ var categoryOptions = []string{
 	"ENHANCEMENT",
 	"FORM",
 	"CONFIGURATION",
-	"AUTORIZATION",
+	"AUTHORIZATION",
 }
 
 var moduleOptions = []string{
@@ -76,6 +77,57 @@ type updateCRRequest struct {
 	EndDate        time.Time `json:"end_date" binding:"required"`
 	FileAttachment []string  `json:"file_attachment" binding:"required,min=1,dive,required"`
 	PICID          *uint     `json:"pic_id" binding:"omitempty"`
+}
+
+func requiresKeterangan(status string) bool {
+	return status == "ISSUED" || status == "CANCEL"
+}
+
+func validateKeteranganByStatus(status, keterangan string) error {
+	if requiresKeterangan(status) && strings.TrimSpace(keterangan) == "" {
+		return errors.New("keterangan is required when status is ISSUED or CANCEL")
+	}
+
+	return nil
+}
+
+func isAllowedValue(value string, allowed []string) bool {
+	for _, option := range allowed {
+		if value == option {
+			return true
+		}
+	}
+
+	return false
+}
+
+func listCRsWithFilter(c *gin.Context, field string, value string) {
+	db, ok := connectDB(c)
+	if !ok {
+		return
+	}
+
+	pagination := utils.ParsePagination(c, 10, 100)
+
+	query := db.Model(&models.ChangeRequest{}).Where(field+" = ?", value)
+
+	var total int64
+	query.Count(&total)
+
+	var crs []models.ChangeRequest
+	query.Preload("Creator").
+		Order("id DESC").
+		Offset(pagination.Offset).
+		Limit(pagination.Limit).
+		Find(&crs)
+
+	paginationMeta := utils.BuildPaginationMeta(pagination.Offset, pagination.Limit, len(crs), total)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"data":       crs,
+		"pagination": paginationMeta,
+	})
 }
 
 // GetCROptions godoc
@@ -183,6 +235,19 @@ func CreateCR(c *gin.Context) {
 		return
 	}
 
+	effectiveStatus := request.Status
+	if effectiveStatus == "" {
+		effectiveStatus = defaultCRStatus
+	}
+
+	if err := validateKeteranganByStatus(effectiveStatus, request.Keterangan); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
 	cr := models.ChangeRequest{
 		Title:          request.Title,
 		Description:    request.Description,
@@ -191,6 +256,7 @@ func CreateCR(c *gin.Context) {
 		Keterangan:     request.Keterangan,
 		Modul:          request.Modul,
 		Category:       request.Category,
+		Keterangan:     request.Keterangan,
 		ReleaseDate:    request.ReleaseDate,
 		StartDate:      request.StartDate,
 		EndDate:        request.EndDate,
@@ -199,11 +265,7 @@ func CreateCR(c *gin.Context) {
 		PICID:          request.PICID,
 	}
 
-	if request.Status != "" {
-		cr.Status = request.Status
-	} else {
-		cr.Status = defaultCRStatus
-	}
+	cr.Status = effectiveStatus
 
 	if err := db.Create(&cr).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to create Change Request", http.StatusInternalServerError, "error", err.Error()))
@@ -423,11 +485,20 @@ func UpdateCR(c *gin.Context) {
 		Modul:          request.Modul,
 		Category:       request.Category,
 		Status:         request.Status,
+		Keterangan:     request.Keterangan,
 		ReleaseDate:    request.ReleaseDate,
 		StartDate:      request.StartDate,
 		EndDate:        request.EndDate,
 		FileAttachment: request.FileAttachment,
 		PICID:          request.PICID,
+	}
+
+	if err := validateKeteranganByStatus(request.Status, request.Keterangan); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
 	}
 
 	if err := db.Model(&models.ChangeRequest{}).Where("id = ?", id).Updates(&updates).Error; err != nil {
@@ -620,4 +691,54 @@ func ExportCRsPDF(c *gin.Context) {
 	if err := pdf.Output(c.Writer); err != nil {
 		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to generate PDF", http.StatusInternalServerError, "error", nil))
 	}
+}
+
+// GetCRsByStatus godoc
+// @Summary List Change Requests by status
+// @Description Get paginated list of change requests filtered by status.
+// @Tags CR
+// @Produce json
+// @Param status path string true "CR status"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/cr/status/{status} [get]
+func GetCRsByStatus(c *gin.Context) {
+	status := strings.ToUpper(strings.TrimSpace(c.Param("status")))
+
+	if !isAllowedValue(status, statusOptions) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid status value",
+		})
+		return
+	}
+
+	listCRsWithFilter(c, "status", status)
+}
+
+// GetCRsByModule godoc
+// @Summary List Change Requests by modul
+// @Description Get paginated list of change requests filtered by modul.
+// @Tags CR
+// @Produce json
+// @Param modul path string true "CR modul"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/cr/modul/{modul} [get]
+func GetCRsByModule(c *gin.Context) {
+	modul := strings.ToUpper(strings.TrimSpace(c.Param("modul")))
+
+	if !isAllowedValue(modul, moduleOptions) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid modul value",
+		})
+		return
+	}
+
+	listCRsWithFilter(c, "modul", modul)
 }
