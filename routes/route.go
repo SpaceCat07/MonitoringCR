@@ -26,8 +26,8 @@ func InitRoutes() *gin.Engine {
 	api := r.Group("/api")
 	{
 		// auth
-		api.POST("register", controllers.Register)
 		api.POST("login", controllers.Login)
+		api.GET("roles", controllers.GetRoleOptions)
 	}
 
 	// this rate limiter only works in single server only
@@ -43,12 +43,40 @@ func InitRoutes() *gin.Engine {
 		// SPR endpoints
 		protected.GET("/cr/options", controllers.GetCROptions)
 		protected.GET("/cr/charts", controllers.GetCRCharts)
+		protected.GET("/cr/export", controllers.ExportCRsPDF)
+		protected.GET("/cr/status/:status", controllers.GetCRsByStatus)
+		protected.GET("/cr/modul/:modul", controllers.GetCRsByModule)
 		protected.POST("/cr/attachments/upload", controllers.UploadCRAttachments)
 		protected.POST("/cr", controllers.CreateCR)
 		protected.GET("/cr", controllers.GetCRs)
 		protected.GET("/cr/:id", controllers.GetCRByID)
 		protected.PUT("/cr/:id", controllers.UpdateCR)
 		protected.DELETE("/cr/:id", controllers.DeleteCR)
+
+		// Subtask endpoints
+		protected.POST("/subtasks", controllers.CreateSubtask)
+		protected.GET("/subtasks", controllers.GetSubtasks)
+		protected.GET("/subtasks/:id", controllers.GetSubtaskByID)
+		protected.PUT("/subtasks/:id", controllers.UpdateSubtask)
+		protected.DELETE("/subtasks/:id", controllers.DeleteSubtask)
+
+		// Activity endpoints
+		protected.POST("/activities", controllers.CreateActivity)
+		protected.GET("/activities", controllers.GetActivities)
+		protected.GET("/activities/:id", controllers.GetActivityByID)
+		protected.PUT("/activities/:id", controllers.UpdateActivity)
+		protected.DELETE("/activities/:id", controllers.DeleteActivity)
+
+		// User endpoints (Admin only)
+		adminGroup := protected.Group("/users")
+		adminGroup.Use(middleware.RoleMiddleware("Admin"))
+		{
+			adminGroup.POST("", controllers.CreateUser)
+			adminGroup.GET("", controllers.GetUsers)
+			adminGroup.GET("/:id", controllers.GetUserByID)
+			adminGroup.PUT("/:id", controllers.UpdateUser)
+			adminGroup.DELETE("/:id", controllers.DeleteUser)
+		}
 	}
 
 	r.GET("/oke", func(ctx *gin.Context) {

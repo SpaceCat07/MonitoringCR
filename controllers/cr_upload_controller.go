@@ -21,10 +21,10 @@ type uploadAttachmentItem struct {
 // @Accept multipart/form-data
 // @Produce json
 // @Param files formData []file true "Attachment files"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 401 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /api/cr/attachments/upload [post]
 func UploadCRAttachments(c *gin.Context) {
@@ -35,20 +35,13 @@ func UploadCRAttachments(c *gin.Context) {
 
 	form, err := c.MultipartForm()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "Invalid multipart form data",
-			"details": err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid multipart form data", http.StatusBadRequest, "error", err.Error()))
 		return
 	}
 
 	files := form.File["files"]
 	if len(files) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "No files uploaded. Use form-data key: files",
-		})
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("No files uploaded. Use form-data key: files", http.StatusBadRequest, "error", nil))
 		return
 	}
 
@@ -58,11 +51,7 @@ func UploadCRAttachments(c *gin.Context) {
 	for _, fileHeader := range files {
 		result, uploadErr := utils.UploadFileToLocal(fileHeader, "uploads/cr", "/uploads/cr")
 		if uploadErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"success": false,
-				"error":   "Failed to upload attachment",
-				"details": uploadErr.Error(),
-			})
+			c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to upload attachment", http.StatusInternalServerError, "error", uploadErr.Error()))
 			return
 		}
 
@@ -75,13 +64,9 @@ func UploadCRAttachments(c *gin.Context) {
 		fileAttachment = append(fileAttachment, result.URL)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Attachments uploaded successfully",
-		"data": gin.H{
-			"uploaded_by":     claims.UserID,
-			"uploaded":        uploaded,
-			"file_attachment": fileAttachment,
-		},
-	})
+	c.JSON(http.StatusOK, utils.FormatResponse("Attachments uploaded successfully", http.StatusOK, "success", gin.H{
+		"uploaded_by":     claims.UserID,
+		"uploaded":        uploaded,
+		"file_attachment": fileAttachment,
+	}))
 }

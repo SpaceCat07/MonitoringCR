@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"MonCR/models"
+	"MonCR/utils"
 	"net/http"
 	"sort"
 	"strings"
@@ -19,6 +20,13 @@ type chartBucket struct {
 type chartSeries struct {
 	Name string  `json:"name"`
 	Data []int64 `json:"data"`
+}
+
+type ContributorStat struct {
+	Name       string `json:"name"`
+	InProgress int    `json:"inProgress"`
+	Under7Days int    `json:"under7Days"`
+	Count      int    `json:"count"`
 }
 
 func parseChartDate(value string) (time.Time, error) {
@@ -55,10 +63,7 @@ func applyChartFilters(c *gin.Context, db *gorm.DB) (*gorm.DB, bool) {
 	if from != "" {
 		fromDate, err := parseChartDate(from)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"error":   "Invalid from date. Use YYYY-MM-DD or RFC3339",
-			})
+			c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid from date. Use YYYY-MM-DD or RFC3339", http.StatusBadRequest, "error", nil))
 			return nil, false
 		}
 		db = db.Where("release_date >= ?", fromDate)
@@ -67,10 +72,7 @@ func applyChartFilters(c *gin.Context, db *gorm.DB) (*gorm.DB, bool) {
 	if to != "" {
 		toDate, err := parseChartDate(to)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"error":   "Invalid to date. Use YYYY-MM-DD or RFC3339",
-			})
+			c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid to date. Use YYYY-MM-DD or RFC3339", http.StatusBadRequest, "error", nil))
 			return nil, false
 		}
 		db = db.Where("release_date <= ?", toDate)
@@ -111,9 +113,9 @@ func sortedMonthBuckets(counts map[string]int64) []chartBucket {
 // @Param modul query string false "Filter by modul"
 // @Param from query string false "Start date (YYYY-MM-DD or RFC3339)"
 // @Param to query string false "End date (YYYY-MM-DD or RFC3339)"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /api/cr/charts [get]
 func GetCRCharts(c *gin.Context) {
@@ -128,11 +130,8 @@ func GetCRCharts(c *gin.Context) {
 	}
 
 	var records []models.ChangeRequest
-	if err := filteredDB.Select("modul", "category", "status", "release_date").Find(&records).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to load chart data",
-		})
+	if err := filteredDB.Select("id", "modul", "category", "status", "release_date", "end_date", "pic_id").Preload("PIC").Find(&records).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to load chart data", http.StatusInternalServerError, "error", err.Error()))
 		return
 	}
 
@@ -140,7 +139,14 @@ func GetCRCharts(c *gin.Context) {
 	categoryCounts := make(map[string]int64)
 	moduleCounts := make(map[string]int64)
 	monthCounts := make(map[string]int64)
+	
+	// Pisahkan map untuk status dan category
 	statusByModule := make(map[string]map[string]int64)
+	categoryByModule := make(map[string]map[string]int64) // TAMBAHAN: Map khusus category
+
+	contributorMap := make(map[string]*ContributorStat)
+	now := time.Now()
+	sevenDaysFromNow := now.Add(7 * 24 * time.Hour)
 
 	var activeCount int64
 	for _, r := range records {
@@ -151,13 +157,40 @@ func GetCRCharts(c *gin.Context) {
 		monthKey := r.ReleaseDate.Format("2006-01")
 		monthCounts[monthKey]++
 
+		// 1. Populate statusByModule
 		if _, exists := statusByModule[r.Modul]; !exists {
 			statusByModule[r.Modul] = map[string]int64{}
 		}
 		statusByModule[r.Modul][r.Status]++
 
+		// 2. Populate categoryByModule (TAMBAHAN LOGIKA)
+		if _, exists := categoryByModule[r.Modul]; !exists {
+			categoryByModule[r.Modul] = map[string]int64{}
+		}
+		categoryByModule[r.Modul][r.Category]++
+
 		if r.Status != "COMPLETE" && r.Status != "CANCEL" {
 			activeCount++
+		}
+
+		// 3. Populate contributors
+		if r.PIC != nil && r.PIC.Fullname != "" {
+			name := r.PIC.Fullname
+			if _, exists := contributorMap[name]; !exists {
+				contributorMap[name] = &ContributorStat{Name: name}
+			}
+			stat := contributorMap[name]
+			stat.Count++
+
+			if r.Status == "IN_PROGRESS" {
+				stat.InProgress++
+			}
+
+			if r.Status != "COMPLETE" && r.Status != "CANCEL" {
+				if r.EndDate.Before(sevenDaysFromNow) {
+					stat.Under7Days++
+				}
+			}
 		}
 	}
 
@@ -166,6 +199,7 @@ func GetCRCharts(c *gin.Context) {
 		moduleLabels = append(moduleLabels, module)
 	}
 
+	// Series untuk Stacked Status
 	stackedSeries := make([]chartSeries, 0, len(statusOptions))
 	for _, status := range statusOptions {
 		data := make([]int64, 0, len(moduleLabels))
@@ -175,35 +209,59 @@ func GetCRCharts(c *gin.Context) {
 		stackedSeries = append(stackedSeries, chartSeries{Name: status, Data: data})
 	}
 
+	// Series untuk Stacked Category (PERBAIKAN LOGIKA)
+	stackedSeries2 := make([]chartSeries, 0, len(categoryOptions))
+	for _, category := range categoryOptions {
+		data := make([]int64, 0, len(moduleLabels))
+		for _, module := range moduleLabels {
+			// Gunakan categoryByModule, bukan statusByModule
+			data = append(data, categoryByModule[module][category]) 
+		}
+		stackedSeries2 = append(stackedSeries2, chartSeries{Name: category, Data: data})
+	}
+
+	var contributors []ContributorStat
+	for _, stat := range contributorMap {
+		contributors = append(contributors, *stat)
+	}
+	sort.Slice(contributors, func(i, j int) bool {
+		return contributors[i].Count > contributors[j].Count
+	})
+	if len(contributors) > 5 {
+		contributors = contributors[:5]
+	}
+
 	total := int64(len(records))
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"summary": gin.H{
-				"total":    total,
-				"active":   activeCount,
-				"complete": statusCounts["COMPLETE"],
-				"cancel":   statusCounts["CANCEL"],
-				"completion": func() float64 {
-					if total == 0 {
-						return 0
-					}
-					return float64(statusCounts["COMPLETE"]) / float64(total) * 100
-				}(),
+	c.JSON(http.StatusOK, utils.FormatResponse("Chart data retrieved successfully", http.StatusOK, "success", gin.H{
+		"summary": gin.H{
+			"total":    total,
+			"active":   activeCount,
+			"complete": statusCounts["COMPLETE"],
+			"cancel":   statusCounts["CANCEL"],
+			"completion": func() float64 {
+				if total == 0 {
+					return 0
+				}
+				return float64(statusCounts["COMPLETE"]) / float64(total) * 100
+			}(),
+		},
+		"pie": gin.H{
+			"by_status":   bucketsByOptions(statusOptions, statusCounts),
+			"by_category": bucketsByOptions(categoryOptions, categoryCounts),
+			"by_modul":    bucketsByOptions(moduleOptions, moduleCounts),
+		},
+		"bar": gin.H{
+			"by_month": sortedMonthBuckets(monthCounts),
+			"stacked_status_by_modul": gin.H{
+				"labels": moduleLabels,
+				"series": stackedSeries,
 			},
-			"pie": gin.H{
-				"by_status":   bucketsByOptions(statusOptions, statusCounts),
-				"by_category": bucketsByOptions(categoryOptions, categoryCounts),
-				"by_modul":    bucketsByOptions(moduleOptions, moduleCounts),
-			},
-			"bar": gin.H{
-				"by_month": sortedMonthBuckets(monthCounts),
-				"stacked_status_by_modul": gin.H{
-					"labels": moduleLabels,
-					"series": stackedSeries,
-				},
+			"stacked_category_by_modul": gin.H{
+				"labels": moduleLabels,
+				"series": stackedSeries2,
 			},
 		},
-	})
+		"top_contributors": contributors,
+	}))
 }
