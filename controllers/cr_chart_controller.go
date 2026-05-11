@@ -22,6 +22,13 @@ type chartSeries struct {
 	Data []int64 `json:"data"`
 }
 
+type ContributorStat struct {
+	Name       string `json:"name"`
+	InProgress int    `json:"inProgress"`
+	Under7Days int    `json:"under7Days"`
+	Count      int    `json:"count"`
+}
+
 func parseChartDate(value string) (time.Time, error) {
 	if value == "" {
 		return time.Time{}, nil
@@ -123,7 +130,7 @@ func GetCRCharts(c *gin.Context) {
 	}
 
 	var records []models.ChangeRequest
-	if err := filteredDB.Select("modul", "category", "status", "release_date").Find(&records).Error; err != nil {
+	if err := filteredDB.Select("id", "modul", "category", "status", "release_date", "end_date", "pic_id").Preload("PIC").Find(&records).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to load chart data", http.StatusInternalServerError, "error", err.Error()))
 		return
 	}
@@ -136,6 +143,10 @@ func GetCRCharts(c *gin.Context) {
 	// Pisahkan map untuk status dan category
 	statusByModule := make(map[string]map[string]int64)
 	categoryByModule := make(map[string]map[string]int64) // TAMBAHAN: Map khusus category
+
+	contributorMap := make(map[string]*ContributorStat)
+	now := time.Now()
+	sevenDaysFromNow := now.Add(7 * 24 * time.Hour)
 
 	var activeCount int64
 	for _, r := range records {
@@ -160,6 +171,26 @@ func GetCRCharts(c *gin.Context) {
 
 		if r.Status != "COMPLETE" && r.Status != "CANCEL" {
 			activeCount++
+		}
+
+		// 3. Populate contributors
+		if r.PIC != nil && r.PIC.Fullname != "" {
+			name := r.PIC.Fullname
+			if _, exists := contributorMap[name]; !exists {
+				contributorMap[name] = &ContributorStat{Name: name}
+			}
+			stat := contributorMap[name]
+			stat.Count++
+
+			if r.Status == "IN_PROGRESS" {
+				stat.InProgress++
+			}
+
+			if r.Status != "COMPLETE" && r.Status != "CANCEL" {
+				if r.EndDate.Before(sevenDaysFromNow) {
+					stat.Under7Days++
+				}
+			}
 		}
 	}
 
@@ -187,6 +218,17 @@ func GetCRCharts(c *gin.Context) {
 			data = append(data, categoryByModule[module][category]) 
 		}
 		stackedSeries2 = append(stackedSeries2, chartSeries{Name: category, Data: data})
+	}
+
+	var contributors []ContributorStat
+	for _, stat := range contributorMap {
+		contributors = append(contributors, *stat)
+	}
+	sort.Slice(contributors, func(i, j int) bool {
+		return contributors[i].Count > contributors[j].Count
+	})
+	if len(contributors) > 5 {
+		contributors = contributors[:5]
 	}
 
 	total := int64(len(records))
@@ -220,5 +262,6 @@ func GetCRCharts(c *gin.Context) {
 				"series": stackedSeries2,
 			},
 		},
+		"top_contributors": contributors,
 	}))
 }
