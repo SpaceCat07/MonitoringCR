@@ -1,5 +1,22 @@
 basePath: /
 definitions:
+  controllers.createActivityRequest:
+    properties:
+      action:
+        enum:
+        - Comment
+        - Change
+        type: string
+      activity:
+        type: string
+      comment:
+        type: string
+      cr_id:
+        type: integer
+    required:
+    - action
+    - cr_id
+    type: object
   controllers.createCRRequest:
     properties:
       category:
@@ -23,6 +40,12 @@ definitions:
           type: string
         minItems: 1
         type: array
+      goal:
+        type: string
+      impact:
+        type: string
+      keterangan:
+        type: string
       modul:
         enum:
         - FINANCE
@@ -31,13 +54,20 @@ definitions:
         - BASIS
         - ABAP
         type: string
+      pic_id:
+        type: integer
       release_date:
+        type: string
+      start_date:
         type: string
       status:
         enum:
+        - DRAFT
         - ISSUED
-        - RELEASE
         - IN_PROGRESS
+        - APPROVAL_TO_RELEASE
+        - RELEASE
+        - APPROVAL_TO_COMPLETE
         - COMPLETE
         - CANCEL
         type: string
@@ -50,9 +80,34 @@ definitions:
     - description
     - end_date
     - file_attachment
+    - goal
+    - impact
     - modul
     - release_date
+    - start_date
     - title
+    type: object
+  controllers.createSubtaskRequest:
+    properties:
+      collaborator_id:
+        type: integer
+      cr_id:
+        type: integer
+      done:
+        type: boolean
+      due_date:
+        type: string
+      progress:
+        maximum: 100
+        type: integer
+      task_name:
+        maxLength: 255
+        minLength: 3
+        type: string
+    required:
+    - cr_id
+    - due_date
+    - task_name
     type: object
   controllers.loginRequest:
     properties:
@@ -64,19 +119,19 @@ definitions:
     - email
     - password
     type: object
-  controllers.registerRequest:
+  controllers.updateActivityRequest:
     properties:
-      email:
+      action:
+        enum:
+        - Comment
+        - Change
         type: string
-      fullname:
+      activity:
         type: string
-      password:
-        minLength: 6
+      comment:
         type: string
     required:
-    - email
-    - fullname
-    - password
+    - action
     type: object
   controllers.updateCRRequest:
     properties:
@@ -101,6 +156,12 @@ definitions:
           type: string
         minItems: 1
         type: array
+      goal:
+        type: string
+      impact:
+        type: string
+      keterangan:
+        type: string
       modul:
         enum:
         - FINANCE
@@ -109,13 +170,20 @@ definitions:
         - BASIS
         - ABAP
         type: string
+      pic_id:
+        type: integer
       release_date:
+        type: string
+      start_date:
         type: string
       status:
         enum:
+        - DRAFT
         - ISSUED
-        - RELEASE
         - IN_PROGRESS
+        - APPROVAL_TO_RELEASE
+        - RELEASE
+        - APPROVAL_TO_COMPLETE
         - COMPLETE
         - CANCEL
         type: string
@@ -128,10 +196,72 @@ definitions:
     - description
     - end_date
     - file_attachment
+    - goal
+    - impact
     - modul
     - release_date
+    - start_date
     - status
     - title
+    type: object
+  controllers.updateSubtaskRequest:
+    properties:
+      collaborator_id:
+        type: integer
+      cr_id:
+        type: integer
+      done:
+        type: boolean
+      due_date:
+        type: string
+      progress:
+        maximum: 100
+        type: integer
+      task_name:
+        maxLength: 255
+        minLength: 3
+        type: string
+    required:
+    - cr_id
+    - due_date
+    - task_name
+    type: object
+  controllers.userRequest:
+    properties:
+      email:
+        type: string
+      fullname:
+        type: string
+      parent_pic:
+        type: integer
+      password:
+        type: string
+      role:
+        enum:
+        - Admin
+        - Manager
+        - PIC
+        - Collaborator
+        type: string
+    required:
+    - email
+    - fullname
+    - role
+    type: object
+  utils.APIResponse:
+    properties:
+      data: {}
+      meta:
+        $ref: '#/definitions/utils.Meta'
+    type: object
+  utils.Meta:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+      status:
+        type: string
     type: object
 info:
   contact: {}
@@ -139,6 +269,171 @@ info:
   title: MonitoringCR API
   version: "1.0"
 paths:
+  /api/activities:
+    get:
+      description: Get paginated list of activities, optionally filter by cr_id
+      parameters:
+      - description: Filter by CR ID
+        in: query
+        name: cr_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List Activities
+      tags:
+      - Activity
+    post:
+      consumes:
+      - application/json
+      description: Create a new activity. UserID is extracted from token.
+      parameters:
+      - description: Create Activity payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.createActivityRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create Activity
+      tags:
+      - Activity
+  /api/activities/{id}:
+    delete:
+      description: Delete activity by id.
+      parameters:
+      - description: Activity ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete Activity
+      tags:
+      - Activity
+    get:
+      description: Retrieve one activity by id.
+      parameters:
+      - description: Activity ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Activity by ID
+      tags:
+      - Activity
+    put:
+      consumes:
+      - application/json
+      description: 'Fully update activity by id. Note: CRID and UserID cannot be updated
+        here.'
+      parameters:
+      - description: Activity ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update Activity payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.updateActivityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Activity
+      tags:
+      - Activity
   /api/cr/attachments/upload:
     post:
       consumes:
@@ -160,23 +455,19 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "400":
           description: Bad Request
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
       security:
       - BearerAuth: []
       summary: Upload CR attachments to local storage
@@ -213,18 +504,15 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "400":
           description: Bad Request
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
       security:
       - BearerAuth: []
       summary: Get CR chart analytics
@@ -248,80 +536,62 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "400":
           description: Bad Request
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
       summary: Login user
       tags:
       - Auth
-  /api/register:
-    post:
-      consumes:
-      - application/json
-      description: Register a new user account.
-      parameters:
-      - description: Register payload
-        in: body
-        name: payload
-        required: true
-        schema:
-          $ref: '#/definitions/controllers.registerRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "409":
-          description: Conflict
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Register user
-      tags:
-      - Auth
-  /api/spr:
+  /api/roles:
     get:
-      description: Get paginated list of change requests.
+      description: Get available options for Role field.
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
+      summary: Get role options
+      tags:
+      - Users
+  /api/spr:
+    get:
+      description: Get paginated list of change requests.
+      parameters:
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Filter by modul
+        in: query
+        name: modul
+        type: string
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
       security:
       - BearerAuth: []
       summary: List Change Requests
@@ -330,7 +600,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Create a new change request.
+      description: Create a new change request. Only Admin can create CR.
       parameters:
       - description: Create CR payload
         in: body
@@ -344,23 +614,23 @@ paths:
         "201":
           description: Created
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "400":
           description: Bad Request
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
       security:
       - BearerAuth: []
       summary: Create Change Request
@@ -381,23 +651,19 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "400":
           description: Bad Request
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
       security:
       - BearerAuth: []
       summary: Delete Change Request
@@ -417,23 +683,19 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "400":
           description: Bad Request
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
       security:
       - BearerAuth: []
       summary: Get Change Request by ID
@@ -442,7 +704,8 @@ paths:
     put:
       consumes:
       - application/json
-      description: Fully update change request by id.
+      description: Fully update change request by id. State machine validation is
+        applied.
       parameters:
       - description: CR ID
         in: path
@@ -461,26 +724,58 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "400":
           description: Bad Request
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
       security:
       - BearerAuth: []
       summary: Update Change Request
+      tags:
+      - CR
+  /api/spr/export:
+    get:
+      description: Export change requests to PDF format.
+      parameters:
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Filter by modul
+        in: query
+        name: modul
+        type: string
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/pdf
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Export Change Requests to PDF
       tags:
       - CR
   /api/spr/options:
@@ -493,13 +788,322 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/utils.APIResponse'
       security:
       - BearerAuth: []
       summary: Get category and status options
       tags:
       - CR
+  /api/subtasks:
+    get:
+      description: Get paginated list of subtasks, optionally filter by cr_id
+      parameters:
+      - description: Filter by CR ID
+        in: query
+        name: cr_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: List Subtasks
+      tags:
+      - Subtask
+    post:
+      consumes:
+      - application/json
+      description: Create a new subtask.
+      parameters:
+      - description: Create Subtask payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.createSubtaskRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create Subtask
+      tags:
+      - Subtask
+  /api/subtasks/{id}:
+    delete:
+      description: Delete subtask by id.
+      parameters:
+      - description: Subtask ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete Subtask
+      tags:
+      - Subtask
+    get:
+      description: Retrieve one subtask by id.
+      parameters:
+      - description: Subtask ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Subtask by ID
+      tags:
+      - Subtask
+    put:
+      consumes:
+      - application/json
+      description: Fully update subtask by id.
+      parameters:
+      - description: Subtask ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update Subtask payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.updateSubtaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Subtask
+      tags:
+      - Subtask
+  /api/users:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get all users
+      tags:
+      - Users
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User data
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.userRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new user
+      tags:
+      - Users
+  /api/users/{id}:
+    delete:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete user by ID
+      tags:
+      - Users
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user by ID
+      tags:
+      - Users
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User data
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.userRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user by ID
+      tags:
+      - Users
 securityDefinitions:
   BearerAuth:
     in: header

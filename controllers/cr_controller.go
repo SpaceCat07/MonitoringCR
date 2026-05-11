@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jung-kurt/gofpdf"
 	"gorm.io/gorm"
 )
 
-const defaultCRStatus = "ISSUED"
+const defaultCRStatus = "DRAFT"
 
 var categoryOptions = []string{
 	"FLOW",
@@ -35,9 +36,12 @@ var moduleOptions = []string{
 }
 
 var statusOptions = []string{
+	"DRAFT",
 	"ISSUED",
-	"RELEASE",
 	"IN_PROGRESS",
+	"APPROVAL_TO_RELEASE",
+	"RELEASE",
+	"APPROVAL_TO_COMPLETE",
 	"COMPLETE",
 	"CANCEL",
 }
@@ -45,23 +49,33 @@ var statusOptions = []string{
 type createCRRequest struct {
 	Title          string    `json:"title" binding:"required,min=3,max=255"`
 	Description    string    `json:"description" binding:"required,min=3"`
+	Goal           string    `json:"goal" binding:"required"`
+	Impact         string    `json:"impact" binding:"required"`
+	Keterangan     string    `json:"keterangan" binding:"omitempty"`
 	Modul          string    `json:"modul" binding:"required,oneof=FINANCE 'MATERIAL MANAGEMENT' 'HUMAN RESOURCE' BASIS ABAP"`
 	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTORIZATION"`
-	Status         string    `json:"status" binding:"omitempty,oneof=ISSUED RELEASE IN_PROGRESS COMPLETE CANCEL"`
+	Status         string    `json:"status" binding:"omitempty,oneof=DRAFT ISSUED IN_PROGRESS APPROVAL_TO_RELEASE RELEASE APPROVAL_TO_COMPLETE COMPLETE CANCEL"`
 	ReleaseDate    time.Time `json:"release_date" binding:"required"`
+	StartDate      time.Time `json:"start_date" binding:"required"`
 	EndDate        time.Time `json:"end_date" binding:"required"`
 	FileAttachment []string  `json:"file_attachment" binding:"required,min=1,dive,required"`
+	PICID          *uint     `json:"pic_id" binding:"omitempty"`
 }
 
 type updateCRRequest struct {
 	Title          string    `json:"title" binding:"required,min=3,max=255"`
 	Description    string    `json:"description" binding:"required,min=3"`
+	Goal           string    `json:"goal" binding:"required"`
+	Impact         string    `json:"impact" binding:"required"`
+	Keterangan     string    `json:"keterangan" binding:"omitempty"`
 	Modul          string    `json:"modul" binding:"required,oneof=FINANCE 'MATERIAL MANAGEMENT' 'HUMAN RESOURCE' BASIS ABAP"`
 	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTORIZATION"`
-	Status         string    `json:"status" binding:"required,oneof=ISSUED RELEASE IN_PROGRESS COMPLETE CANCEL"`
+	Status         string    `json:"status" binding:"required,oneof=DRAFT ISSUED IN_PROGRESS APPROVAL_TO_RELEASE RELEASE APPROVAL_TO_COMPLETE COMPLETE CANCEL"`
 	ReleaseDate    time.Time `json:"release_date" binding:"required"`
+	StartDate      time.Time `json:"start_date" binding:"required"`
 	EndDate        time.Time `json:"end_date" binding:"required"`
 	FileAttachment []string  `json:"file_attachment" binding:"required,min=1,dive,required"`
+	PICID          *uint     `json:"pic_id" binding:"omitempty"`
 }
 
 // GetCROptions godoc
@@ -69,24 +83,21 @@ type updateCRRequest struct {
 // @Description Get available options for CATEGORY and STATUS fields when creating/updating change request.
 // @Tags CR
 // @Produce json
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /api/spr/options [get]
 func GetCROptions(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"module_options":   moduleOptions,
-			"category_options": categoryOptions,
-			"status_options":   statusOptions,
-		},
-	})
+	c.JSON(http.StatusOK, utils.FormatResponse("Options retrieved successfully", http.StatusOK, "success", gin.H{
+		"module_options":   moduleOptions,
+		"category_options": categoryOptions,
+		"status_options":   statusOptions,
+	}))
 }
 
 func connectDB(c *gin.Context) (*gorm.DB, bool) {
 	db, err := config.DBConnect()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to database"})
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to connect to database", http.StatusInternalServerError, "error", nil))
 		return nil, false
 	}
 	return db, true
@@ -95,19 +106,13 @@ func connectDB(c *gin.Context) (*gorm.DB, bool) {
 func getClaims(c *gin.Context) (*utils.Claims, bool) {
 	claimsValue, exists := c.Get("claims")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"error":   "Unauthorized",
-		})
+		c.JSON(http.StatusUnauthorized, utils.FormatResponse("Unauthorized", http.StatusUnauthorized, "error", nil))
 		return nil, false
 	}
 
 	claims, ok := claimsValue.(*utils.Claims)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"error":   "Invalid token claims",
-		})
+		c.JSON(http.StatusUnauthorized, utils.FormatResponse("Invalid token claims", http.StatusUnauthorized, "error", nil))
 		return nil, false
 	}
 
@@ -117,10 +122,7 @@ func getClaims(c *gin.Context) (*utils.Claims, bool) {
 func parseCRID(c *gin.Context) (uint, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "Invalid Change Request id",
-		})
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid Change Request id", http.StatusBadRequest, "error", nil))
 		return 0, false
 	}
 	return uint(id), true
@@ -128,7 +130,17 @@ func parseCRID(c *gin.Context) (uint, bool) {
 
 func findCRByID(db *gorm.DB, id uint) (*models.ChangeRequest, error) {
 	var cr models.ChangeRequest
-	if err := db.Preload("Creator").First(&cr, id).Error; err != nil {
+	if err := db.
+		Preload("Creator").
+		Preload("PIC").
+		Preload("Activities", func(db *gorm.DB) *gorm.DB {
+			return db.Order("activities.created_at DESC")
+		}).
+		Preload("Activities.User").
+		Preload("SubTasks", func(db *gorm.DB) *gorm.DB {
+			return db.Order("sub_tasks.created_at ASC")
+		}).
+		First(&cr, id).Error; err != nil {
 		return nil, err
 	}
 	return &cr, nil
@@ -136,18 +148,29 @@ func findCRByID(db *gorm.DB, id uint) (*models.ChangeRequest, error) {
 
 // CreateCR godoc
 // @Summary Create Change Request
-// @Description Create a new change request.
+// @Description Create a new change request. Only Admin can create CR.
 // @Tags CR
 // @Accept json
 // @Produce json
 // @Param payload body createCRRequest true "Create CR payload"
-// @Success 201 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 201 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 401 {object} utils.APIResponse
+// @Failure 403 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /api/spr [post]
 func CreateCR(c *gin.Context) {
+	claims, ok := getClaims(c)
+	if !ok {
+		return
+	}
+
+	if claims.Role != "Admin" {
+		c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya Admin yang dapat membuat Change Request", http.StatusForbidden, "error", nil))
+		return
+	}
+
 	var request createCRRequest
 
 	db, ok := connectDB(c)
@@ -156,28 +179,24 @@ func CreateCR(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "Invalid input data",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	claims, ok := getClaims(c)
-	if !ok {
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid input data", http.StatusBadRequest, "error", err.Error()))
 		return
 	}
 
 	cr := models.ChangeRequest{
 		Title:          request.Title,
 		Description:    request.Description,
+		Goal:           request.Goal,
+		Impact:         request.Impact,
+		Keterangan:     request.Keterangan,
 		Modul:          request.Modul,
 		Category:       request.Category,
 		ReleaseDate:    request.ReleaseDate,
+		StartDate:      request.StartDate,
 		EndDate:        request.EndDate,
 		FileAttachment: request.FileAttachment,
 		CreatedBy:      claims.UserID,
+		PICID:          request.PICID,
 	}
 
 	if request.Status != "" {
@@ -187,21 +206,13 @@ func CreateCR(c *gin.Context) {
 	}
 
 	if err := db.Create(&cr).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to create Change Request",
-			"details": err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to create Change Request", http.StatusInternalServerError, "error", err.Error()))
 		return
 	}
 
 	db.Preload("Creator").First(&cr, cr.ID)
 
-	c.JSON(http.StatusCreated, gin.H{
-		"success": true,
-		"message": "Change Request created successfully",
-		"data":    cr,
-	})
+	c.JSON(http.StatusCreated, utils.FormatResponse("Change Request created successfully", http.StatusCreated, "success", cr))
 }
 
 // GetCRs godoc
@@ -209,23 +220,49 @@ func CreateCR(c *gin.Context) {
 // @Description Get paginated list of change requests.
 // @Tags CR
 // @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Param status query string false "Filter by status"
+// @Param modul query string false "Filter by modul"
+// @Param category query string false "Filter by category"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /api/spr [get]
 func GetCRs(c *gin.Context) {
+	claims, ok := getClaims(c)
+	if !ok {
+		return
+	}
+
 	db, ok := connectDB(c)
 	if !ok {
 		return
 	}
 
 	pagination := utils.ParsePagination(c, 10, 100)
+	query := db.Model(&models.ChangeRequest{})
+
+	// Role-based visibility
+	if claims.Role == "PIC" {
+		query = query.Where("pic_id = ?", claims.UserID)
+	} else if claims.Role == "Collaborator" {
+		query = query.Where("id IN (SELECT cr_id FROM sub_tasks WHERE collaborator_id = ?)", claims.UserID)
+	}
+
+	if status := c.Query("status"); status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if modul := c.Query("modul"); modul != "" {
+		query = query.Where("modul = ?", modul)
+	}
+	if category := c.Query("category"); category != "" {
+		query = query.Where("category = ?", category)
+	}
 
 	var total int64
-	db.Model(&models.ChangeRequest{}).Count(&total)
+	query.Count(&total)
 
 	var crs []models.ChangeRequest
-	db.Preload("Creator").
+	query.Preload("Creator").Preload("PIC").
 		Order("id DESC").
 		Offset(pagination.Offset).
 		Limit(pagination.Limit).
@@ -233,11 +270,10 @@ func GetCRs(c *gin.Context) {
 
 	paginationMeta := utils.BuildPaginationMeta(pagination.Offset, pagination.Limit, len(crs), total)
 
-	c.JSON(http.StatusOK, gin.H{
-		"success":    true,
-		"data":       crs,
+	c.JSON(http.StatusOK, utils.FormatResponse("Change Requests retrieved successfully", http.StatusOK, "success", gin.H{
+		"items":      crs,
 		"pagination": paginationMeta,
-	})
+	}))
 }
 
 // GetCRByID godoc
@@ -246,10 +282,10 @@ func GetCRs(c *gin.Context) {
 // @Tags CR
 // @Produce json
 // @Param id path int true "CR ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /api/spr/{id} [get]
 func GetCRByID(c *gin.Context) {
@@ -266,41 +302,38 @@ func GetCRByID(c *gin.Context) {
 	cr, err := findCRByID(db, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"success": false,
-				"error":   "Change Request not found",
-			})
+			c.JSON(http.StatusNotFound, utils.FormatResponse("Change Request not found", http.StatusNotFound, "error", nil))
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to retrieve Change Request",
-		})
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to retrieve Change Request", http.StatusInternalServerError, "error", nil))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    cr,
-	})
+	c.JSON(http.StatusOK, utils.FormatResponse("Change Request retrieved successfully", http.StatusOK, "success", cr))
 }
 
 // UpdateCR godoc
 // @Summary Update Change Request
-// @Description Fully update change request by id.
+// @Description Fully update change request by id. State machine validation is applied.
 // @Tags CR
 // @Accept json
 // @Produce json
 // @Param id path int true "CR ID"
 // @Param payload body updateCRRequest true "Update CR payload"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 403 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /api/spr/{id} [put]
 func UpdateCR(c *gin.Context) {
+	claims, ok := getClaims(c)
+	if !ok {
+		return
+	}
+
 	db, ok := connectDB(c)
 	if !ok {
 		return
@@ -311,51 +344,111 @@ func UpdateCR(c *gin.Context) {
 		return
 	}
 
-	_, err := findCRByID(db, id)
+	currentCR, err := findCRByID(db, id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "Change Request not found",
-		})
+		c.JSON(http.StatusNotFound, utils.FormatResponse("Change Request not found", http.StatusNotFound, "error", nil))
 		return
 	}
 
 	var request updateCRRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "Invalid input data",
-			"details": err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid input data", http.StatusBadRequest, "error", err.Error()))
 		return
+	}
+
+	// State Machine Validation
+	if request.Status != currentCR.Status {
+		role := claims.Role
+
+		// Aturan Keterangan Wajib saat CANCEL
+		if request.Status == "CANCEL" && request.Keterangan == "" {
+			c.JSON(http.StatusBadRequest, utils.FormatResponse("Keterangan wajib diisi ketika membatalkan CR", http.StatusBadRequest, "error", nil))
+			return
+		}
+
+		if role != "Admin" {
+			switch request.Status {
+			case "ISSUED":
+				if role != "PIC" || currentCR.Status != "DRAFT" {
+					c.JSON(http.StatusForbidden, utils.FormatResponse("Transisi ke ISSUED hanya dapat dilakukan oleh PIC/Admin dari status DRAFT", http.StatusForbidden, "error", nil))
+					return
+				}
+			case "IN_PROGRESS":
+				if role != "Manager" {
+					c.JSON(http.StatusForbidden, utils.FormatResponse("Perubahan ke IN_PROGRESS memerlukan persetujuan Manager", http.StatusForbidden, "error", nil))
+					return
+				}
+				if currentCR.Status != "ISSUED" && currentCR.Status != "APPROVAL_TO_RELEASE" && currentCR.Status != "APPROVAL_TO_COMPLETE" {
+					c.JSON(http.StatusBadRequest, utils.FormatResponse("Transisi status tidak valid", http.StatusBadRequest, "error", nil))
+					return
+				}
+			case "APPROVAL_TO_RELEASE":
+				if role != "PIC" || currentCR.Status != "IN_PROGRESS" || currentCR.PICID == nil || *currentCR.PICID != claims.UserID {
+					c.JSON(http.StatusForbidden, utils.FormatResponse("Transisi ke APPROVAL_TO_RELEASE hanya dapat dilakukan oleh PIC dari CR ini", http.StatusForbidden, "error", nil))
+					return
+				}
+			case "RELEASE":
+				if role != "Manager" || currentCR.Status != "APPROVAL_TO_RELEASE" {
+					c.JSON(http.StatusForbidden, utils.FormatResponse("Transisi ke RELEASE memerlukan persetujuan Manager dari status APPROVAL_TO_RELEASE", http.StatusForbidden, "error", nil))
+					return
+				}
+			case "APPROVAL_TO_COMPLETE":
+				if role != "PIC" || currentCR.Status != "RELEASE" || currentCR.PICID == nil || *currentCR.PICID != claims.UserID {
+					c.JSON(http.StatusForbidden, utils.FormatResponse("Transisi ke APPROVAL_TO_COMPLETE hanya dapat dilakukan oleh PIC dari CR ini", http.StatusForbidden, "error", nil))
+					return
+				}
+			case "COMPLETE":
+				if role != "Manager" || currentCR.Status != "APPROVAL_TO_COMPLETE" {
+					c.JSON(http.StatusForbidden, utils.FormatResponse("Penyelesaian CR memerlukan persetujuan Manager dari status APPROVAL_TO_COMPLETE", http.StatusForbidden, "error", nil))
+					return
+				}
+			case "CANCEL":
+				if role != "Manager" {
+					c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya Manager/Admin yang dapat melakukan CANCEL", http.StatusForbidden, "error", nil))
+					return
+				}
+			default:
+				c.JSON(http.StatusBadRequest, utils.FormatResponse("Transisi status tidak dikenal", http.StatusBadRequest, "error", nil))
+				return
+			}
+		}
 	}
 
 	updates := models.ChangeRequest{
 		Title:          request.Title,
 		Description:    request.Description,
+		Goal:           request.Goal,
+		Impact:         request.Impact,
+		Keterangan:     request.Keterangan,
 		Modul:          request.Modul,
 		Category:       request.Category,
 		Status:         request.Status,
 		ReleaseDate:    request.ReleaseDate,
+		StartDate:      request.StartDate,
 		EndDate:        request.EndDate,
 		FileAttachment: request.FileAttachment,
+		PICID:          request.PICID,
 	}
 
 	if err := db.Model(&models.ChangeRequest{}).Where("id = ?", id).Updates(&updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to update Change Request",
-		})
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to update Change Request", http.StatusInternalServerError, "error", nil))
 		return
+	}
+
+	// Catat perubahan status ke Activity
+	if request.Status != currentCR.Status {
+		activityLog := models.Activity{
+			CRID:       &id,
+			UserID:     &claims.UserID,
+			Action:     "Change",
+			Activities: "Memindahkan status dari " + currentCR.Status + " ke " + request.Status,
+		}
+		db.Create(&activityLog)
 	}
 
 	updatedCR, _ := findCRByID(db, id)
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Change Request updated successfully",
-		"data":    updatedCR,
-	})
+	c.JSON(http.StatusOK, utils.FormatResponse("Change Request updated successfully", http.StatusOK, "success", updatedCR))
 }
 
 // DeleteCR godoc
@@ -364,13 +457,23 @@ func UpdateCR(c *gin.Context) {
 // @Tags CR
 // @Produce json
 // @Param id path int true "CR ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /api/spr/{id} [delete]
 func DeleteCR(c *gin.Context) {
+	claims, ok := getClaims(c)
+	if !ok {
+		return
+	}
+
+	if claims.Role != "Admin" {
+		c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya Admin yang dapat menghapus Change Request", http.StatusForbidden, "error", nil))
+		return
+	}
+
 	db, ok := connectDB(c)
 	if !ok {
 		return
@@ -383,23 +486,138 @@ func DeleteCR(c *gin.Context) {
 
 	cr, err := findCRByID(db, id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "Change Request not found",
-		})
+		c.JSON(http.StatusNotFound, utils.FormatResponse("Change Request not found", http.StatusNotFound, "error", nil))
 		return
 	}
 
 	if err := db.Delete(cr).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to delete Change Request",
-		})
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to delete Change Request", http.StatusInternalServerError, "error", nil))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Change Request deleted successfully",
-	})
+	c.JSON(http.StatusOK, utils.FormatResponse("Change Request deleted successfully", http.StatusOK, "success", nil))
+}
+
+// ExportCRsPDF godoc
+// @Summary Export Change Requests to PDF
+// @Description Export change requests to PDF format.
+// @Tags CR
+// @Produce application/pdf
+// @Param status query string false "Filter by status"
+// @Param modul query string false "Filter by modul"
+// @Param category query string false "Filter by category"
+// @Success 200 {file} file
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/spr/export [get]
+func ExportCRsPDF(c *gin.Context) {
+	claims, ok := getClaims(c)
+	if !ok {
+		return
+	}
+
+	db, ok := connectDB(c)
+	if !ok {
+		return
+	}
+
+	query := db.Model(&models.ChangeRequest{})
+
+	// Role-based visibility
+	if claims.Role == "PIC" {
+		query = query.Where("pic_id = ?", claims.UserID)
+	} else if claims.Role == "Collaborator" {
+		query = query.Where("id IN (SELECT cr_id FROM sub_tasks WHERE collaborator_id = ?)", claims.UserID)
+	}
+
+	if status := c.Query("status"); status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if modul := c.Query("modul"); modul != "" {
+		query = query.Where("modul = ?", modul)
+	}
+	if category := c.Query("category"); category != "" {
+		query = query.Where("category = ?", category)
+	}
+
+	var crs []models.ChangeRequest
+	if err := query.Preload("PIC").Order("id DESC").Find(&crs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to fetch data for export", http.StatusInternalServerError, "error", nil))
+		return
+	}
+
+	// Use A3 Landscape (420 x 297 mm) to fit many columns
+	pdf := gofpdf.New("L", "mm", "A3", "")
+	pdf.AddPage()
+	pdf.SetFont("Arial", "B", 14)
+	pdf.Cell(0, 10, "Laporan Data Change Request (CR)")
+	pdf.Ln(12)
+
+	// Table Header
+	pdf.SetFont("Arial", "B", 10)
+	widths := []float64{10, 40, 60, 60, 60, 35, 35, 30, 40, 25}
+	headers := []string{"ID", "Judul", "Deskripsi", "Goal", "Impact", "Modul", "Kategori", "Status", "PIC", "Mulai"}
+
+	for i, h := range headers {
+		pdf.CellFormat(widths[i], 10, h, "1", 0, "C", false, 0, "")
+	}
+	pdf.Ln(-1)
+
+	// Table Body
+	pdf.SetFont("Arial", "", 9)
+	for _, cr := range crs {
+		var maxLines int = 1
+		
+		picName := "-"
+		if cr.PIC != nil {
+			picName = cr.PIC.Fullname
+		}
+
+		texts := []string{
+			strconv.Itoa(int(cr.ID)),
+			cr.Title,
+			cr.Description,
+			cr.Goal,
+			cr.Impact,
+			cr.Modul,
+			cr.Category,
+			cr.Status,
+			picName,
+			cr.StartDate.Format("2006-01-02"),
+		}
+
+		// Calculate row height
+		for i, text := range texts {
+			lines := pdf.SplitText(text, widths[i]-2)
+			if len(lines) > maxLines {
+				maxLines = len(lines)
+			}
+		}
+
+		h := float64(maxLines) * 5.0
+
+		// Add new page if row exceeds page bottom
+		_, pageY := pdf.GetXY()
+		_, _, _, marginB := pdf.GetMargins()
+		pageH, _ := pdf.GetPageSize()
+		if pageY+h > pageH-marginB {
+			pdf.AddPage()
+		}
+
+		x, y := pdf.GetXY()
+		for i, text := range texts {
+			pdf.Rect(x, y, widths[i], h, "D")
+			pdf.MultiCell(widths[i], 5.0, text, "", "L", false)
+			x += widths[i]
+			pdf.SetXY(x, y)
+		}
+		pdf.Ln(h)
+	}
+
+	c.Header("Content-Disposition", "attachment; filename=change_requests.pdf")
+	c.Header("Content-Type", "application/pdf")
+	
+	if err := pdf.Output(c.Writer); err != nil {
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to generate PDF", http.StatusInternalServerError, "error", nil))
+	}
 }

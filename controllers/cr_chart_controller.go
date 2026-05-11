@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"MonCR/models"
+	"MonCR/utils"
 	"net/http"
 	"sort"
 	"strings"
@@ -55,10 +56,7 @@ func applyChartFilters(c *gin.Context, db *gorm.DB) (*gorm.DB, bool) {
 	if from != "" {
 		fromDate, err := parseChartDate(from)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"error":   "Invalid from date. Use YYYY-MM-DD or RFC3339",
-			})
+			c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid from date. Use YYYY-MM-DD or RFC3339", http.StatusBadRequest, "error", nil))
 			return nil, false
 		}
 		db = db.Where("release_date >= ?", fromDate)
@@ -67,10 +65,7 @@ func applyChartFilters(c *gin.Context, db *gorm.DB) (*gorm.DB, bool) {
 	if to != "" {
 		toDate, err := parseChartDate(to)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"error":   "Invalid to date. Use YYYY-MM-DD or RFC3339",
-			})
+			c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid to date. Use YYYY-MM-DD or RFC3339", http.StatusBadRequest, "error", nil))
 			return nil, false
 		}
 		db = db.Where("release_date <= ?", toDate)
@@ -111,9 +106,9 @@ func sortedMonthBuckets(counts map[string]int64) []chartBucket {
 // @Param modul query string false "Filter by modul"
 // @Param from query string false "Start date (YYYY-MM-DD or RFC3339)"
 // @Param to query string false "End date (YYYY-MM-DD or RFC3339)"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /api/cr/charts [get]
 func GetCRCharts(c *gin.Context) {
@@ -129,10 +124,7 @@ func GetCRCharts(c *gin.Context) {
 
 	var records []models.ChangeRequest
 	if err := filteredDB.Select("modul", "category", "status", "release_date").Find(&records).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "Failed to load chart data",
-		})
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to load chart data", http.StatusInternalServerError, "error", err.Error()))
 		return
 	}
 
@@ -177,33 +169,30 @@ func GetCRCharts(c *gin.Context) {
 
 	total := int64(len(records))
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"summary": gin.H{
-				"total":    total,
-				"active":   activeCount,
-				"complete": statusCounts["COMPLETE"],
-				"cancel":   statusCounts["CANCEL"],
-				"completion": func() float64 {
-					if total == 0 {
-						return 0
-					}
-					return float64(statusCounts["COMPLETE"]) / float64(total) * 100
-				}(),
-			},
-			"pie": gin.H{
-				"by_status":   bucketsByOptions(statusOptions, statusCounts),
-				"by_category": bucketsByOptions(categoryOptions, categoryCounts),
-				"by_modul":    bucketsByOptions(moduleOptions, moduleCounts),
-			},
-			"bar": gin.H{
-				"by_month": sortedMonthBuckets(monthCounts),
-				"stacked_status_by_modul": gin.H{
-					"labels": moduleLabels,
-					"series": stackedSeries,
-				},
+	c.JSON(http.StatusOK, utils.FormatResponse("Chart data retrieved successfully", http.StatusOK, "success", gin.H{
+		"summary": gin.H{
+			"total":    total,
+			"active":   activeCount,
+			"complete": statusCounts["COMPLETE"],
+			"cancel":   statusCounts["CANCEL"],
+			"completion": func() float64 {
+				if total == 0 {
+					return 0
+				}
+				return float64(statusCounts["COMPLETE"]) / float64(total) * 100
+			}(),
+		},
+		"pie": gin.H{
+			"by_status":   bucketsByOptions(statusOptions, statusCounts),
+			"by_category": bucketsByOptions(categoryOptions, categoryCounts),
+			"by_modul":    bucketsByOptions(moduleOptions, moduleCounts),
+		},
+		"bar": gin.H{
+			"by_month": sortedMonthBuckets(monthCounts),
+			"stacked_status_by_modul": gin.H{
+				"labels": moduleLabels,
+				"series": stackedSeries,
 			},
 		},
-	})
+	}))
 }
