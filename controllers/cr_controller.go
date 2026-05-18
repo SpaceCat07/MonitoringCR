@@ -80,7 +80,8 @@ type updateCRRequest struct {
 }
 
 func requiresKeterangan(status string) bool {
-	return status == "ISSUED" || status == "CANCEL"
+	// Keterangan hanya wajib saat CANCEL (bukan ISSUED)
+	return status == "CANCEL"
 }
 
 func validateKeteranganByStatus(status, keterangan string) error {
