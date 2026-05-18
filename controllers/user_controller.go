@@ -254,3 +254,22 @@ func DeleteUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, utils.FormatResponse("User deleted successfully", http.StatusOK, "success", nil))
 }
+
+
+func ReturnCollabByPIC(c *gin.Context)  {
+	db, err := config.DBConnect()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to connect to database", http.StatusInternalServerError, "error", nil))
+		return
+	}
+
+	PICID := c.Param("PIC_ID")
+	
+	var collabs []models.Users
+	if err := db.Where("parent_pic = ?", PICID).Find(&collabs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to fetch collaborators", http.StatusInternalServerError, "error", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, utils.FormatResponse("Collaborators retrieved successfully", http.StatusOK, "success", collabs))
+}
