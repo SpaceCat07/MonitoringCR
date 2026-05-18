@@ -636,7 +636,7 @@ func ExportCRsPDF(c *gin.Context) {
 	pdf.SetFont("Arial", "", 9)
 	for _, cr := range crs {
 		var maxLines int = 1
-		
+
 		picName := "-"
 		if cr.PIC != nil {
 			picName = cr.PIC.Fullname
@@ -685,7 +685,7 @@ func ExportCRsPDF(c *gin.Context) {
 
 	c.Header("Content-Disposition", "attachment; filename=change_requests.pdf")
 	c.Header("Content-Type", "application/pdf")
-	
+
 	if err := pdf.Output(c.Writer); err != nil {
 		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to generate PDF", http.StatusInternalServerError, "error", nil))
 	}
@@ -739,4 +739,92 @@ func GetCRsByModule(c *gin.Context) {
 	}
 
 	listCRsWithFilter(c, "modul", modul)
+}
+
+type createDraftRequest struct {
+	Title          string     `json:"title" binding:"required,min=3,max=255"`
+	Description    string     `json:"description" binding:"omitempty"`
+	Goal           string     `json:"goal" binding:"omitempty"`
+	Impact         string     `json:"impact" binding:"omitempty"`
+	Keterangan     string     `json:"keterangan" binding:"omitempty"`
+	Modul          string     `json:"modul" binding:"omitempty,oneof=FINANCE 'MATERIAL MANAGEMENT' 'HUMAN RESOURCE' BASIS ABAP"`
+	Category       string     `json:"category" binding:"omitempty,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTORIZATION"`
+	ReleaseDate    *time.Time `json:"release_date" binding:"omitempty"`
+	StartDate      *time.Time `json:"start_date" binding:"omitempty"`
+	EndDate        *time.Time `json:"end_date" binding:"omitempty"`
+	FileAttachment []string   `json:"file_attachment" binding:"omitempty"`
+	PICID          *uint      `json:"pic_id" binding:"omitempty"`
+}
+
+// CreateDraft godoc
+// @Summary Create Draft Change Request
+// @Description Create a new draft change request with minimal required fields. Only Admin can create draft CR.
+// @Tags CR
+// @Accept json
+// @Produce json
+// @Param payload body createDraftRequest true "Create Draft CR payload"
+// @Success 201 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 401 {object} utils.APIResponse
+// @Failure 403 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/spr/draft [post]
+func CreateDraft(c *gin.Context) {
+	claims, ok := getClaims(c)
+	if !ok {
+		return
+	}
+
+	if claims.Role != "Admin" {
+		c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya Admin yang dapat membuat Change Request", http.StatusForbidden, "error", nil))
+		return
+	}
+
+	db, ok := connectDB(c)
+	if !ok {
+		return
+	}
+
+	var request createDraftRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid input data", http.StatusBadRequest, "error", err.Error()))
+		return
+	}
+
+	// Create draft with minimal validation - only title is required
+	cr := models.ChangeRequest{
+		Title:          request.Title,
+		Description:    request.Description,
+		Goal:           request.Goal,
+		Impact:         request.Impact,
+		Keterangan:     request.Keterangan,
+		Modul:          request.Modul,
+		Category:       request.Category,
+		Status:         "DRAFT",
+		CreatedBy:      claims.UserID,
+		PICID:          request.PICID,
+		FileAttachment: request.FileAttachment,
+	}
+
+	// Set optional date fields if provided
+	if request.ReleaseDate != nil {
+		cr.ReleaseDate = *request.ReleaseDate
+	}
+	if request.StartDate != nil {
+		cr.StartDate = *request.StartDate
+	}
+	if request.EndDate != nil {
+		cr.EndDate = *request.EndDate
+	}
+
+	if err := db.Create(&cr).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to create draft Change Request", http.StatusInternalServerError, "error", err.Error()))
+		return
+	}
+
+	// Reload dengan relations
+	db.Preload("Creator").Preload("PIC").First(&cr, cr.ID)
+
+	c.JSON(http.StatusCreated, utils.FormatResponse("Draft Change Request created successfully", http.StatusCreated, "success", cr))
 }

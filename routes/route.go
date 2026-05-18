@@ -47,6 +47,7 @@ func InitRoutes() *gin.Engine {
 		protected.GET("/cr/status/:status", controllers.GetCRsByStatus)
 		protected.GET("/cr/modul/:modul", controllers.GetCRsByModule)
 		protected.POST("/cr/attachments/upload", controllers.UploadCRAttachments)
+		protected.POST("/cr/draft", controllers.CreateDraft)
 		protected.POST("/cr", controllers.CreateCR)
 		protected.GET("/cr", controllers.GetCRs)
 		protected.GET("/cr/:id", controllers.GetCRByID)
@@ -77,6 +78,9 @@ func InitRoutes() *gin.Engine {
 			adminGroup.PUT("/:id", controllers.UpdateUser)
 			adminGroup.DELETE("/:id", controllers.DeleteUser)
 		}
+
+		// Collaborator endpoints
+		protected.GET("/collaborator/:PIC_ID", controllers.ReturnCollabByPIC)
 	}
 
 	r.GET("/oke", func(ctx *gin.Context) {

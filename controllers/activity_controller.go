@@ -16,6 +16,7 @@ type createActivityRequest struct {
 	Action     string `json:"action" binding:"required,oneof=Comment Change"`
 	Activities string `json:"activity" binding:"omitempty"`
 	Comment    string `json:"comment" binding:"omitempty"`
+	ReplyToID  *uint  `json:"reply_to_id" binding:"omitempty"` // Optional: for replying to activities
 }
 
 type updateActivityRequest struct {
@@ -35,7 +36,12 @@ func parseActivityID(c *gin.Context) (uint, bool) {
 
 func findActivityByID(db *gorm.DB, id uint) (*models.Activity, error) {
 	var activity models.Activity
-	if err := db.Preload("CR").Preload("User").First(&activity, id).Error; err != nil {
+	if err := db.Preload("CR").Preload("User").
+		Preload("RepliedActivity").Preload("RepliedActivity.User").
+		Preload("Replies", func(db *gorm.DB) *gorm.DB {
+			return db.Preload("User").Order("created_at ASC")
+		}).
+		First(&activity, id).Error; err != nil {
 		return nil, err
 	}
 	return &activity, nil
@@ -85,6 +91,7 @@ func CreateActivity(c *gin.Context) {
 		Action:     request.Action,
 		Activities: request.Activities,
 		Comment:    request.Comment,
+		ReplyToID:  request.ReplyToID, // Set reply_to_id if provided
 	}
 
 	if err := db.Create(&activity).Error; err != nil {
@@ -92,7 +99,7 @@ func CreateActivity(c *gin.Context) {
 		return
 	}
 
-	db.Preload("CR").Preload("User").First(&activity, activity.ID)
+	db.Preload("CR").Preload("User").Preload("RepliedActivity").Preload("RepliedActivity.User").First(&activity, activity.ID)
 
 	c.JSON(http.StatusCreated, utils.FormatResponse("Activity created successfully", http.StatusCreated, "success", activity))
 }
@@ -129,6 +136,10 @@ func GetActivities(c *gin.Context) {
 
 	var activities []models.Activity
 	query.Preload("CR").Preload("User").
+		Preload("RepliedActivity").Preload("RepliedActivity.User").
+		Preload("Replies", func(db *gorm.DB) *gorm.DB {
+			return db.Preload("User").Order("created_at ASC")
+		}).
 		Order("id DESC").
 		Offset(pagination.Offset).
 		Limit(pagination.Limit).
