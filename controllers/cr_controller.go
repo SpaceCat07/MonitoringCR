@@ -324,7 +324,7 @@ func GetCRs(c *gin.Context) {
 	query.Count(&total)
 
 	var crs []models.ChangeRequest
-	query.Preload("Creator").Preload("PIC").
+	query.Preload("Creator").Preload("PIC").Preload("SubTasks").Preload("SubTasks.Collaborator").
 		Order("id DESC").
 		Offset(pagination.Offset).
 		Limit(pagination.Limit).
