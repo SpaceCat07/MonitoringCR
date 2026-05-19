@@ -54,7 +54,7 @@ type createCRRequest struct {
 	Impact         string    `json:"impact" binding:"required"`
 	Keterangan     string    `json:"keterangan" binding:"omitempty"`
 	Modul          string    `json:"modul" binding:"required,oneof=FINANCE 'MATERIAL MANAGEMENT' 'HUMAN RESOURCE' BASIS ABAP"`
-	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTORIZATION"`
+	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTHORIZATION"`
 	Status         string    `json:"status" binding:"omitempty,oneof=DRAFT ISSUED IN_PROGRESS APPROVAL_TO_RELEASE RELEASE APPROVAL_TO_COMPLETE COMPLETE CANCEL"`
 	ReleaseDate    time.Time `json:"release_date" binding:"required"`
 	StartDate      time.Time `json:"start_date" binding:"required"`
@@ -70,7 +70,7 @@ type updateCRRequest struct {
 	Impact         string    `json:"impact" binding:"required"`
 	Keterangan     string    `json:"keterangan" binding:"omitempty"`
 	Modul          string    `json:"modul" binding:"required,oneof=FINANCE 'MATERIAL MANAGEMENT' 'HUMAN RESOURCE' BASIS ABAP"`
-	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTORIZATION"`
+	Category       string    `json:"category" binding:"required,oneof=FLOW REPORT INTERFACE CONVERTION ENHANCEMENT FORM CONFIGURATION AUTHORIZATION"`
 	Status         string    `json:"status" binding:"required,oneof=DRAFT ISSUED IN_PROGRESS APPROVAL_TO_RELEASE RELEASE APPROVAL_TO_COMPLETE COMPLETE CANCEL"`
 	ReleaseDate    time.Time `json:"release_date" binding:"required"`
 	StartDate      time.Time `json:"start_date" binding:"required"`
@@ -307,7 +307,16 @@ func GetCRs(c *gin.Context) {
 	if claims.Role == "PIC" {
 		query = query.Where("pic_id = ?", claims.UserID)
 	} else if claims.Role == "Collaborator" {
-		query = query.Where("id IN (SELECT cr_id FROM sub_tasks WHERE collaborator_id = ?)", claims.UserID)
+		var user models.Users
+		if err := db.Select("parent_pic").First(&user, claims.UserID).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to resolve collaborator parent PIC", http.StatusInternalServerError, "error", err.Error()))
+			return
+		}
+		if user.ParentPIC == nil {
+			query = query.Where("1 = 0")
+		} else {
+			query = query.Where("pic_id = ?", *user.ParentPIC)
+		}
 	}
 
 	if status := c.Query("status"); status != "" {
