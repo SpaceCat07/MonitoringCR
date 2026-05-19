@@ -5,6 +5,7 @@ import (
 	"MonCR/utils"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -166,7 +167,6 @@ func sortedMonthBuckets(counts map[string]int64) []chartBucket {
 func GetCRCharts(c *gin.Context) {
 
 	db, ok := connectDB(c)
-
 	if !ok {
 		return
 	}
@@ -175,19 +175,23 @@ func GetCRCharts(c *gin.Context) {
 		c,
 		db.Model(&models.ChangeRequest{}),
 	)
-
 	if !ok {
 		return
 	}
 
 	var records []models.ChangeRequest
 
+	// 1. FILTER SOFT DELETE & PRELOAD ACTIVITIES
+	// Memastikan CR tidak terhapus dan mengurutkan log Activity dari yang paling lama ke baru
 	err := filteredDB.
+		Where("change_requests.deleted_at IS NULL"). 
 		Preload("PIC").
+		Preload("Activities", func(db *gorm.DB) *gorm.DB {
+			return db.Where("activities.deleted_at IS NULL").Order("activities.created_at ASC")
+		}).
 		Find(&records).Error
 
 	if err != nil {
-
 		c.JSON(
 			http.StatusInternalServerError,
 			utils.FormatResponse(
@@ -197,8 +201,17 @@ func GetCRCharts(c *gin.Context) {
 				err.Error(),
 			),
 		)
-
 		return
+	}
+
+	// ======================================
+	// PARAMETER TAHUN UNTUK LINE CHART
+	// ======================================
+	targetYear := time.Now().Year()
+	if yearStr := c.Query("year"); yearStr != "" {
+		if y, err := strconv.Atoi(yearStr); err == nil {
+			targetYear = y
+		}
 	}
 
 	// ======================================
@@ -208,10 +221,6 @@ func GetCRCharts(c *gin.Context) {
 	statusCounts := make(map[string]int64)
 	categoryCounts := make(map[string]int64)
 	moduleCounts := make(map[string]int64)
-
-	issuedCounts := make(map[string]int64)
-	inProgressCounts := make(map[string]int64)
-	completeCounts := make(map[string]int64)
 
 	statusByModule := make(map[string]map[string]int64)
 	categoryByModule := make(map[string]map[string]int64)
@@ -223,107 +232,103 @@ func GetCRCharts(c *gin.Context) {
 
 	var activeCount int64
 
+	// BUCKET 12 BULAN
+	monthLabels := []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
+	issuedData := make([]int64, 12)
+	inProgressData := make([]int64, 12)
+	completeData := make([]int64, 12)
+
 	// ======================================
 	// LOOP DATA
 	// ======================================
 
 	for _, r := range records {
 
-		// ======================================
 		// PIE CHART COUNTER
-		// ======================================
-
 		statusCounts[r.Status]++
 		categoryCounts[r.Category]++
 		moduleCounts[r.Modul]++
 
 		// ======================================
-		// LIFECYCLE CHART
+		// 2. LIFECYCLE DARI TABEL ACTIVITY
 		// ======================================
+		var issuedDate, inProgressDate, completeDate time.Time
 
-		// ISSUED
-		if r.Status == "ISSUED" {
-
-			month := r.UpdatedAt.Format("2006-01")
-
-			issuedCounts[month]++
+		for _, act := range r.Activities {
+			if act.Action == "Change" {
+				// Menggunakan HasSuffix agar string seperti "dari ISSUED ke DRAFT" tidak keliru terbaca
+				// dan menggunakan IsZero agar kita mendapatkan tanggal PERTAMA KALI dipindahkan ke status tersebut.
+				if strings.HasSuffix(act.Activities, "ke ISSUED") && issuedDate.IsZero() {
+					issuedDate = act.CreatedAt
+				} else if strings.HasSuffix(act.Activities, "ke IN_PROGRESS") && inProgressDate.IsZero() {
+					inProgressDate = act.CreatedAt
+				} else if strings.HasSuffix(act.Activities, "ke COMPLETE") && completeDate.IsZero() {
+					completeDate = act.CreatedAt
+				}
+			}
 		}
 
-		// IN PROGRESS
-		if r.Status == "IN_PROGRESS" {
-
-			month := r.UpdatedAt.Format("2006-01")
-
-			inProgressCounts[month]++
+		// Jika tanggal ditemukan dan tahunnya sesuai dengan filter pencarian
+		if !issuedDate.IsZero() && issuedDate.Year() == targetYear {
+			monthIdx := int(issuedDate.Month()) - 1
+			if monthIdx >= 0 && monthIdx < 12 {
+				issuedData[monthIdx]++
+			}
 		}
 
-		// COMPLETE
-		if r.Status == "COMPLETE" {
+		if !inProgressDate.IsZero() && inProgressDate.Year() == targetYear {
+			monthIdx := int(inProgressDate.Month()) - 1
+			if monthIdx >= 0 && monthIdx < 12 {
+				inProgressData[monthIdx]++
+			}
+		}
 
-			month := r.UpdatedAt.Format("2006-01")
-
-			completeCounts[month]++
+		if !completeDate.IsZero() && completeDate.Year() == targetYear {
+			monthIdx := int(completeDate.Month()) - 1
+			if monthIdx >= 0 && monthIdx < 12 {
+				completeData[monthIdx]++
+			}
 		}
 
 		// ======================================
-		// STACKED STATUS BY MODULE
+		// STACKED STATUS & CATEGORY BY MODULE
 		// ======================================
 
 		if _, exists := statusByModule[r.Modul]; !exists {
-
 			statusByModule[r.Modul] = map[string]int64{}
 		}
-
 		statusByModule[r.Modul][r.Status]++
 
-		// ======================================
-		// STACKED CATEGORY BY MODULE
-		// ======================================
-
 		if _, exists := categoryByModule[r.Modul]; !exists {
-
 			categoryByModule[r.Modul] = map[string]int64{}
 		}
-
 		categoryByModule[r.Modul][r.Category]++
 
 		// ======================================
-		// ACTIVE COUNT
+		// ACTIVE COUNT & CONTRIBUTORS
 		// ======================================
 
-		if r.Status != "COMPLETE" &&
-			r.Status != "CANCEL" {
-
+		if r.Status != "COMPLETE" && r.Status != "CANCEL" {
 			activeCount++
 		}
 
-		// ======================================
-		// TOP CONTRIBUTORS
-		// ======================================
-
-		if r.PIC != nil &&
-			r.PIC.Fullname != "" {
-
+		if r.PIC != nil && r.PIC.Fullname != "" {
 			name := r.PIC.Fullname
 
 			if _, exists := contributorMap[name]; !exists {
-
 				contributorMap[name] = &ContributorStat{
 					Name: name,
 				}
 			}
 
 			stat := contributorMap[name]
-
 			stat.Count++
 
 			if r.Status == "IN_PROGRESS" {
 				stat.InProgress++
 			}
 
-			if r.Status != "COMPLETE" &&
-				r.Status != "CANCEL" {
-
+			if r.Status != "COMPLETE" && r.Status != "CANCEL" {
 				if r.EndDate.Before(sevenDaysFromNow) {
 					stat.Under7Days++
 				}
@@ -332,84 +337,43 @@ func GetCRCharts(c *gin.Context) {
 	}
 
 	// ======================================
-	// STACKED STATUS SERIES
+	// STACKED SERIES FORMULATION
 	// ======================================
 
 	moduleLabels := make([]string, 0, len(moduleOptions))
-
 	for _, module := range moduleOptions {
-
 		moduleLabels = append(moduleLabels, module)
 	}
 
 	stackedSeries := make([]chartSeries, 0, len(statusOptions))
-
 	for _, status := range statusOptions {
-
 		data := make([]int64, 0, len(moduleLabels))
-
 		for _, module := range moduleLabels {
-
-			data = append(
-				data,
-				statusByModule[module][status],
-			)
+			data = append(data, statusByModule[module][status])
 		}
-
-		stackedSeries = append(
-			stackedSeries,
-			chartSeries{
-				Name: status,
-				Data: data,
-			},
-		)
+		stackedSeries = append(stackedSeries, chartSeries{Name: status, Data: data})
 	}
-
-	// ======================================
-	// STACKED CATEGORY SERIES
-	// ======================================
 
 	stackedSeries2 := make([]chartSeries, 0, len(categoryOptions))
-
 	for _, category := range categoryOptions {
-
 		data := make([]int64, 0, len(moduleLabels))
-
 		for _, module := range moduleLabels {
-
-			data = append(
-				data,
-				categoryByModule[module][category],
-			)
+			data = append(data, categoryByModule[module][category])
 		}
-
-		stackedSeries2 = append(
-			stackedSeries2,
-			chartSeries{
-				Name: category,
-				Data: data,
-			},
-		)
+		stackedSeries2 = append(stackedSeries2, chartSeries{Name: category, Data: data})
 	}
 
 	// ======================================
-	// TOP CONTRIBUTORS
+	// TOP CONTRIBUTORS SORTING
 	// ======================================
 
 	var contributors []ContributorStat
-
 	for _, stat := range contributorMap {
-
-		contributors = append(
-			contributors,
-			*stat,
-		)
+		contributors = append(contributors, *stat)
 	}
 
 	sort.Slice(contributors, func(i, j int) bool {
-
-		return contributors[i].Count >
-			contributors[j].Count
+		return contributors[i].Count > contributors[j].Count
 	})
 
 	if len(contributors) > 5 {
@@ -429,98 +393,43 @@ func GetCRCharts(c *gin.Context) {
 			http.StatusOK,
 			"success",
 			gin.H{
-
-				// ======================================
-				// SUMMARY
-				// ======================================
-
 				"summary": gin.H{
 					"total":    total,
 					"active":   activeCount,
 					"complete": statusCounts["COMPLETE"],
 					"cancel":   statusCounts["CANCEL"],
-
 					"completion": func() float64 {
-
 						if total == 0 {
 							return 0
 						}
-
-						return float64(statusCounts["COMPLETE"]) /
-							float64(total) * 100
+						return float64(statusCounts["COMPLETE"]) / float64(total) * 100
 					}(),
 				},
-
-				// ======================================
-				// PIE CHART
-				// ======================================
-
 				"pie": gin.H{
-
-					"by_status": bucketsByOptions(
-						statusOptions,
-						statusCounts,
-					),
-
-					"by_category": bucketsByOptions(
-						categoryOptions,
-						categoryCounts,
-					),
-
-					"by_modul": bucketsByOptions(
-						moduleOptions,
-						moduleCounts,
-					),
+					"by_status":   bucketsByOptions(statusOptions, statusCounts),
+					"by_category": bucketsByOptions(categoryOptions, categoryCounts),
+					"by_modul":    bucketsByOptions(moduleOptions, moduleCounts),
 				},
-
-				// ======================================
-				// BAR CHART
-				// ======================================
-
-				"bar": gin.H{
-
-					// ======================================
-					// LIFECYCLE
-					// ======================================
-
+				"line": gin.H{
 					"lifecycle": gin.H{
-
-						"issued": sortedMonthBuckets(
-							issuedCounts,
-						),
-
-						"in_progress": sortedMonthBuckets(
-							inProgressCounts,
-						),
-
-						"complete": sortedMonthBuckets(
-							completeCounts,
-						),
+						"labels": monthLabels,
+						"series": []chartSeries{
+							{Name: "Issued", Data: issuedData},
+							{Name: "Complete", Data: completeData},
+							{Name: "In Progress", Data: inProgressData},
+						},
 					},
-
-					// ======================================
-					// STACKED STATUS
-					// ======================================
-
+				},
+				"bar": gin.H{
 					"stacked_status_by_modul": gin.H{
 						"labels": moduleLabels,
 						"series": stackedSeries,
 					},
-
-					// ======================================
-					// STACKED CATEGORY
-					// ======================================
-
 					"stacked_category_by_modul": gin.H{
 						"labels": moduleLabels,
 						"series": stackedSeries2,
 					},
 				},
-
-				// ======================================
-				// TOP CONTRIBUTORS
-				// ======================================
-
 				"top_contributors": contributors,
 			},
 		),
