@@ -258,6 +258,15 @@ func UpdateSubtask(c *gin.Context) {
 				c.JSON(http.StatusForbidden, utils.FormatResponse("Collaborator hanya dapat mengubah progress dan status selesai", http.StatusForbidden, "error", nil))
 				return
 			}
+			allowedProgress := map[uint]bool{35: true, 75: true, 100: true}
+			if request.Progress != currentSubtask.Progress && !allowedProgress[request.Progress] {
+				c.JSON(http.StatusBadRequest, utils.FormatResponse("Progress untuk collaborator hanya 35, 75, atau 100", http.StatusBadRequest, "error", nil))
+				return
+			}
+			if request.Done != currentSubtask.Done {
+				c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya PIC yang dapat memindahkan subtask ke status berikutnya", http.StatusForbidden, "error", nil))
+				return
+			}
 		} else if role == "PIC" {
 			var cr models.ChangeRequest
 			if err := db.First(&cr, currentSubtask.CRID).Error; err != nil || cr.PICID == nil || *cr.PICID != claims.UserID {
@@ -306,7 +315,7 @@ func UpdateSubtask(c *gin.Context) {
 		if request.Done {
 			statusText = "Selesai (Done)"
 		}
-		
+
 		activityLog := models.Activity{
 			CRID:       &request.CRID,
 			UserID:     &claims.UserID,
