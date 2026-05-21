@@ -90,6 +90,16 @@ func InitRoutes() *gin.Engine {
 		protected.GET("/dashboard/module-status", controllers.ModulevsStatus)
 		protected.GET("/dashboard/module-health-overview", controllers.ModuleHealthOverviewStats)
 		protected.GET("/dashboard/lifecycle-line-chart", controllers.LifecycleLineChart)
+
+		// untuk lazy load tiap status
+		protected.GET("/cr/lazy/draft", controllers.GetCRLazyDraft)
+		protected.GET("/cr/lazy/issued", controllers.GetCRLazyIssued)
+		protected.GET("/cr/lazy/in-progress", controllers.GetCRLazyInProgress)
+		protected.GET("/cr/lazy/approval-to-release", controllers.GetCRLazyApprovalToRelease)
+		protected.GET("/cr/lazy/release", controllers.GetCRLazyRelease)
+		protected.GET("/cr/lazy/approval-to-complete", controllers.GetCRLazyApprovalToComplete)
+		protected.GET("/cr/lazy/complete", controllers.GetCRLazyComplete)
+		protected.GET("/cr/lazy/cancel", controllers.GetCRLazyCancel)
 	}
 
 	r.GET("/oke", func(ctx *gin.Context) {
