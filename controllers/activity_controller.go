@@ -205,6 +205,11 @@ func GetActivityByID(c *gin.Context) {
 // @Security BearerAuth
 // @Router /api/activities/{id} [put]
 func UpdateActivity(c *gin.Context) {
+	claims, ok := getClaims(c)
+	if !ok {
+		return
+	}
+
 	db, ok := connectDB(c)
 	if !ok {
 		return
@@ -215,9 +220,17 @@ func UpdateActivity(c *gin.Context) {
 		return
 	}
 
-	_, err := findActivityByID(db, id)
+	activity, err := findActivityByID(db, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, utils.FormatResponse("Activity not found", http.StatusNotFound, "error", nil))
+		return
+	}
+	if activity.Action != "Comment" {
+		c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya komentar yang dapat diedit", http.StatusForbidden, "error", nil))
+		return
+	}
+	if activity.UserID == nil || (*activity.UserID != claims.UserID && claims.Role != "Admin") {
+		c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya pemilik komentar yang dapat mengedit komentar ini", http.StatusForbidden, "error", nil))
 		return
 	}
 
@@ -228,9 +241,8 @@ func UpdateActivity(c *gin.Context) {
 	}
 
 	updates := models.Activity{
-		Action:     request.Action,
-		Activities: request.Activities,
-		Comment:    request.Comment,
+		Action:  "Comment",
+		Comment: request.Comment,
 	}
 
 	if err := db.Model(&models.Activity{}).Where("id = ?", id).Updates(&updates).Error; err != nil {
@@ -256,6 +268,11 @@ func UpdateActivity(c *gin.Context) {
 // @Security BearerAuth
 // @Router /api/activities/{id} [delete]
 func DeleteActivity(c *gin.Context) {
+	claims, ok := getClaims(c)
+	if !ok {
+		return
+	}
+
 	db, ok := connectDB(c)
 	if !ok {
 		return
@@ -269,6 +286,14 @@ func DeleteActivity(c *gin.Context) {
 	activity, err := findActivityByID(db, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, utils.FormatResponse("Activity not found", http.StatusNotFound, "error", nil))
+		return
+	}
+	if activity.Action != "Comment" {
+		c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya komentar yang dapat dihapus", http.StatusForbidden, "error", nil))
+		return
+	}
+	if activity.UserID == nil || (*activity.UserID != claims.UserID && claims.Role != "Admin") {
+		c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya pemilik komentar yang dapat menghapus komentar ini", http.StatusForbidden, "error", nil))
 		return
 	}
 

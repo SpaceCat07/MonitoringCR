@@ -5,6 +5,7 @@ import (
 	"MonCR/models"
 	"MonCR/utils"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -100,6 +101,23 @@ func isAllowedValue(value string, allowed []string) bool {
 	}
 
 	return false
+}
+
+func truncateActivityText(s string) string {
+	if len(s) <= 255 {
+		return s
+	}
+	return s[:255]
+}
+
+func createChangeActivity(db *gorm.DB, crID uint, userID uint, text string) {
+	activityLog := models.Activity{
+		CRID:       &crID,
+		UserID:     &userID,
+		Action:     "Change",
+		Activities: truncateActivityText(text),
+	}
+	db.Create(&activityLog)
 }
 
 func listCRsWithFilter(c *gin.Context, field string, value string) {
@@ -272,6 +290,8 @@ func CreateCR(c *gin.Context) {
 		return
 	}
 
+	createChangeActivity(db, cr.ID, claims.UserID, fmt.Sprintf("Created a new Change Request: '%s'", cr.Title))
+
 	db.Preload("Creator").First(&cr, cr.ID)
 
 	c.JSON(http.StatusCreated, utils.FormatResponse("Change Request created successfully", http.StatusCreated, "success", cr))
@@ -300,7 +320,7 @@ func GetCRs(c *gin.Context) {
 		return
 	}
 
-	pagination := utils.ParsePagination(c, 10, 100)
+	// pagination := utils.ParsePagination(c, 10, 100)
 	query := db.Model(&models.ChangeRequest{})
 
 	// Role-based visibility
@@ -329,21 +349,25 @@ func GetCRs(c *gin.Context) {
 		query = query.Where("category = ?", category)
 	}
 
-	var total int64
-	query.Count(&total)
+	// var total int64
+	// query.Count(&total)
 
 	var crs []models.ChangeRequest
+	// query.Preload("Creator").Preload("PIC").Preload("SubTasks").Preload("SubTasks.Collaborator").
+	// 	Order("id DESC").
+	// 	Offset(pagination.Offset).
+	// 	Limit(pagination.Limit).
+	// 	Find(&crs)
+
 	query.Preload("Creator").Preload("PIC").Preload("SubTasks").Preload("SubTasks.Collaborator").
 		Order("id DESC").
-		Offset(pagination.Offset).
-		Limit(pagination.Limit).
 		Find(&crs)
 
-	paginationMeta := utils.BuildPaginationMeta(pagination.Offset, pagination.Limit, len(crs), total)
+	// paginationMeta := utils.BuildPaginationMeta(pagination.Offset, pagination.Limit, len(crs), total)
 
 	c.JSON(http.StatusOK, utils.FormatResponse("Change Requests retrieved successfully", http.StatusOK, "success", gin.H{
 		"items":      crs,
-		"pagination": paginationMeta,
+		// "pagination": paginationMeta,
 	}))
 }
 
@@ -501,6 +525,26 @@ func UpdateCR(c *gin.Context) {
 		PICID:          request.PICID,
 	}
 
+	ptrUintEqual := func(a, b *uint) bool {
+		if a == nil && b == nil {
+			return true
+		}
+		if a == nil || b == nil {
+			return false
+		}
+		return *a == *b
+	}
+	resolvePICName := func(id *uint) string {
+		if id == nil {
+			return "Unassigned"
+		}
+		var u models.Users
+		if err := db.Select("fullname").First(&u, *id).Error; err != nil || strings.TrimSpace(u.Fullname) == "" {
+			return fmt.Sprintf("User#%d", *id)
+		}
+		return u.Fullname
+	}
+
 	if err := validateKeteranganByStatus(request.Status, request.Keterangan); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
@@ -514,15 +558,57 @@ func UpdateCR(c *gin.Context) {
 		return
 	}
 
-	// Catat perubahan status ke Activity
-	if request.Status != currentCR.Status {
-		activityLog := models.Activity{
-			CRID:       &id,
-			UserID:     &claims.UserID,
-			Action:     "Change",
-			Activities: "Memindahkan status dari " + currentCR.Status + " ke " + request.Status,
+	toDateStr := func(t time.Time) string {
+		return t.Format("2006-01-02")
+	}
+	toFilesStr := func(files []string) string {
+		if len(files) == 0 {
+			return "-"
 		}
-		db.Create(&activityLog)
+		return strings.Join(files, ", ")
+	}
+	logFieldChange := func(fieldName, oldValue, newValue string) {
+		createChangeActivity(db, id, claims.UserID, fmt.Sprintf("Changed %s from '%s' to '%s'", fieldName, oldValue, newValue))
+	}
+
+	if request.Title != currentCR.Title {
+		logFieldChange("Title", currentCR.Title, request.Title)
+	}
+	if request.Description != currentCR.Description {
+		logFieldChange("Description", currentCR.Description, request.Description)
+	}
+	if request.Goal != currentCR.Goal {
+		logFieldChange("Goal", currentCR.Goal, request.Goal)
+	}
+	if request.Impact != currentCR.Impact {
+		logFieldChange("Impact", currentCR.Impact, request.Impact)
+	}
+	if request.Keterangan != currentCR.Keterangan {
+		logFieldChange("Keterangan", currentCR.Keterangan, request.Keterangan)
+	}
+	if request.Modul != currentCR.Modul {
+		logFieldChange("Module", currentCR.Modul, request.Modul)
+	}
+	if request.Category != currentCR.Category {
+		logFieldChange("Category", currentCR.Category, request.Category)
+	}
+	if request.Status != currentCR.Status {
+		logFieldChange("Status", currentCR.Status, request.Status)
+	}
+	if !request.ReleaseDate.Equal(currentCR.ReleaseDate) {
+		logFieldChange("Release Date", toDateStr(currentCR.ReleaseDate), toDateStr(request.ReleaseDate))
+	}
+	if !request.StartDate.Equal(currentCR.StartDate) {
+		logFieldChange("Start Date", toDateStr(currentCR.StartDate), toDateStr(request.StartDate))
+	}
+	if !request.EndDate.Equal(currentCR.EndDate) {
+		logFieldChange("End Date", toDateStr(currentCR.EndDate), toDateStr(request.EndDate))
+	}
+	if strings.Join(request.FileAttachment, "|") != strings.Join(currentCR.FileAttachment, "|") {
+		logFieldChange("File Attachment", toFilesStr(currentCR.FileAttachment), toFilesStr(request.FileAttachment))
+	}
+	if !ptrUintEqual(request.PICID, currentCR.PICID) {
+		logFieldChange("PIC", resolvePICName(currentCR.PICID), resolvePICName(request.PICID))
 	}
 
 	updatedCR, _ := findCRByID(db, id)
@@ -566,6 +652,10 @@ func DeleteCR(c *gin.Context) {
 	cr, err := findCRByID(db, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, utils.FormatResponse("Change Request not found", http.StatusNotFound, "error", nil))
+		return
+	}
+	if cr.Status != "DRAFT" {
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("CR hanya dapat dihapus ketika status DRAFT", http.StatusBadRequest, "error", nil))
 		return
 	}
 
@@ -832,6 +922,8 @@ func CreateDraft(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to create draft Change Request", http.StatusInternalServerError, "error", err.Error()))
 		return
 	}
+
+	createChangeActivity(db, cr.ID, claims.UserID, fmt.Sprintf("Created a new Change Request: '%s'", cr.Title))
 
 	// Reload dengan relations
 	db.Preload("Creator").Preload("PIC").First(&cr, cr.ID)
