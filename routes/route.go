@@ -81,6 +81,15 @@ func InitRoutes() *gin.Engine {
 
 		// Collaborator endpoints
 		protected.GET("/collaborator/:PIC_ID", controllers.ReturnCollabByPIC)
+
+		// untuk statistik dashboard
+		protected.GET("/dashboard/kpi-summary", controllers.KPISummary)
+		protected.GET("/dashboard/top-pic", controllers.TopPIC)
+		protected.GET("/dashboard/due-today", controllers.DueTodayStats)
+		protected.GET("/dashboard/module-category", controllers.ModulevsCategory)
+		protected.GET("/dashboard/module-status", controllers.ModulevsStatus)
+		protected.GET("/dashboard/module-health-overview", controllers.ModuleHealthOverviewStats)
+		protected.GET("/dashboard/lifecycle-line-chart", controllers.LifecycleLineChart)
 	}
 
 	r.GET("/oke", func(ctx *gin.Context) {
