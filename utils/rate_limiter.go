@@ -14,7 +14,7 @@ type ClientLimiter struct {
 
 var (
 	clients = make(map[string]*ClientLimiter)
-	mu 		sync.Mutex
+	mu      sync.Mutex
 )
 
 func GetLimiter(userID string) *rate.Limiter {
@@ -26,9 +26,10 @@ func GetLimiter(userID string) *rate.Limiter {
 		return c.limiter
 	}
 
-	limiter := rate.NewLimiter(2, 10)
+	// Allow higher bursts for UI activity without triggering 429.
+	limiter := rate.NewLimiter(50, 200)
 	clients[userID] = &ClientLimiter{
-		limiter: limiter,
+		limiter:  limiter,
 		lastSeen: time.Now(),
 	}
 

@@ -366,7 +366,7 @@ func GetCRs(c *gin.Context) {
 	// paginationMeta := utils.BuildPaginationMeta(pagination.Offset, pagination.Limit, len(crs), total)
 
 	c.JSON(http.StatusOK, utils.FormatResponse("Change Requests retrieved successfully", http.StatusOK, "success", gin.H{
-		"items":      crs,
+		"items": crs,
 		// "pagination": paginationMeta,
 	}))
 }
@@ -454,6 +454,20 @@ func UpdateCR(c *gin.Context) {
 	// State Machine Validation
 	if request.Status != currentCR.Status {
 		role := claims.Role
+
+		// Require all subtasks to be 100% before PIC can move to approval steps
+		if role == "PIC" && (request.Status == "APPROVAL_TO_RELEASE" || request.Status == "APPROVAL_TO_COMPLETE") {
+			var total int64
+			var incomplete int64
+			db.Model(&models.SubTask{}).Where("cr_id = ?", id).Count(&total)
+			if total > 0 {
+				db.Model(&models.SubTask{}).Where("cr_id = ? AND (progress < 100 OR done = false)", id).Count(&incomplete)
+				if incomplete > 0 {
+					c.JSON(http.StatusBadRequest, utils.FormatResponse("All subtasks must be 100% before moving to the next status", http.StatusBadRequest, "error", nil))
+					return
+				}
+			}
+		}
 
 		// Aturan Keterangan Wajib saat CANCEL
 		if request.Status == "CANCEL" && request.Keterangan == "" {
