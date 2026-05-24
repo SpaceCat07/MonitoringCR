@@ -34,17 +34,17 @@ func KPISummary(c *gin.Context) {
 		Where("deleted_at IS NULL").
 		Select(`
             COUNT(*) AS total_cr,
-            COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') AS in_progress,
+            COUNT(*) FILTER (WHERE change_requests.status = 'IN_PROGRESS') AS in_progress,
             COUNT(*) FILTER (
-                WHERE status NOT IN ('COMPLETE', 'CANCEL')
-                AND end_date::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+                WHERE change_requests.status NOT IN ('COMPLETE', 'CANCEL')
+                AND change_requests.end_date::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
             ) AS near_deadline,
             COUNT(*) FILTER (
-                WHERE status NOT IN ('COMPLETE', 'CANCEL')
-                AND end_date::date < CURRENT_DATE
+                WHERE change_requests.status NOT IN ('COMPLETE', 'CANCEL')
+                AND change_requests.end_date::date < CURRENT_DATE
             ) AS overdue,
-            COUNT(*) FILTER (WHERE status = 'CANCEL') AS cancel,
-            COUNT(*) FILTER (WHERE status = 'COMPLETE') AS complete
+            COUNT(*) FILTER (WHERE change_requests.status = 'CANCEL') AS cancel,
+            COUNT(*) FILTER (WHERE change_requests.status = 'COMPLETE') AS complete
         `).
 		Scan(&summary).Error
 
