@@ -22,4 +22,5 @@ type SubTask struct {
 
 	DueDate			time.Time `gorm:"not null" json:"due_date"`
 	Progress		uint	`gorm:"int;not null;default:0;check:progress >= 0 AND progress <= 100" json:"progress"`
+	Keterangan		string	`gorm:"type:text;default:''" json:"keterangan"`
 }
