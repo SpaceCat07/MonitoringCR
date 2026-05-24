@@ -13,9 +13,10 @@ import (
 // @version 1.0
 // @description API documentation for MonitoringCR.
 // @BasePath /
-// @securityDefinitions.apikey BearerAuth
+// @securityDefinitions.apiKey BearerAuth
 // @in header
 // @name Authorization
+// @description Bearer token authentication
 
 func main() {
 	godotenv.Load()

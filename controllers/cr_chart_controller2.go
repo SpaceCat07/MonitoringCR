@@ -21,6 +21,15 @@ type KPISummaryData struct {
     Complete     int64 `json:"complete"`
 }
 
+// KPISummary godoc
+// @Summary Get KPI Summary Dashboard
+// @Description Retrieve key performance indicators including total CR, in-progress count, near deadline, overdue, cancelled, and completed items.
+// @Tags Charts
+// @Produce json
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/dashboard/kpi-summary [get]
 func KPISummary(c *gin.Context){
 	db, ok := connectDB(c)
 	if !ok {
@@ -73,6 +82,17 @@ type PICStats struct {
     Count      int64
 }
 
+// TopPIC godoc
+// @Summary Get Top PIC Statistics
+// @Description Retrieve PIC (Person In Charge) statistics sorted by CR count, including in-progress and near-deadline counts with pagination.
+// @Tags Charts
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 5, max: 5)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/dashboard/top-pic [get]
 func TopPIC(c *gin.Context){
 	db, ok := connectDB(c)
 	if !ok {
@@ -146,6 +166,15 @@ type DueToday struct {
 	Total		uint
 }
 
+// DueTodayStats godoc
+// @Summary Get CRs Due Today Statistics
+// @Description Retrieve change requests that are due today, grouped by title, PIC, module, and status.
+// @Tags Charts
+// @Produce json
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/dashboard/due-today [get]
 func DueTodayStats (c *gin.Context) {
 	db, ok := connectDB(c)
     if !ok {
@@ -211,6 +240,15 @@ type ModuleCategoryStat struct {
     Total    int64  `json:"total"`
 }
 
+// ModulevsCategory godoc
+// @Summary Get Module vs Category Statistics
+// @Description Retrieve cross-tabulation of modules and categories showing the count of CRs for each combination.
+// @Tags Charts
+// @Produce json
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/dashboard/module-category [get]
 func ModulevsCategory(c *gin.Context){
 	db, ok := connectDB(c)
     if !ok {
@@ -254,6 +292,15 @@ type ModuleStatusStats struct {
     Total    int64  `json:"total"`
 }
 
+// ModulevsStatus godoc
+// @Summary Get Module vs Status Statistics
+// @Description Retrieve cross-tabulation of modules and statuses showing the count of CRs for each combination.
+// @Tags Charts
+// @Produce json
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/dashboard/module-status [get]
 func ModulevsStatus(c *gin.Context) {
 	db, ok := connectDB(c)
     if !ok {
@@ -301,7 +348,15 @@ type ModuleHealthOverview struct {
     CompleteCount       int64   `json:"complete_count"`
     CancelCount         int64   `json:"cancel_count"`
 }
-
+// ModuleHealthOverviewStats godoc
+// @Summary Get Module Health Overview
+// @Description Retrieve health status of each module based on overdue percentage, completion rate, and overall health scoring (Baik/Cukup/Buruk).
+// @Tags Charts
+// @Produce json
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/dashboard/module-health-overview [get]
 func ModuleHealthOverviewStats(c *gin.Context) {
     db, ok := connectDB(c)
     if !ok {
@@ -372,6 +427,16 @@ type LifecycleSeries struct {
     Data []int64 `json:"data"`
 }
 
+// LifecycleLineChart godoc
+// @Summary Get CR Lifecycle Line Chart
+// @Description Retrieve monthly progression of CRs through ISSUED, IN_PROGRESS, and COMPLETE statuses. Supports filtering by year.
+// @Tags Charts
+// @Produce json
+// @Param year query int false "Year filter (default: current year)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/dashboard/lifecycle-line-chart [get]
 func LifecycleLineChart(c *gin.Context) {
     db, ok := connectDB(c)
     if !ok {
