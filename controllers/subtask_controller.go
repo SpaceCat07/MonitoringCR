@@ -30,6 +30,7 @@ type updateSubtaskRequest struct {
 	DueDate        time.Time `json:"due_date" binding:"required"`
 	Progress       uint      `json:"progress" binding:"omitempty,max=100"`
 	Done           bool      `json:"done" binding:"omitempty"`
+	Keterangan     string    `json:"keterangan" binding:"omitempty"`
 }
 
 func parseSubtaskID(c *gin.Context) (uint, bool) {
@@ -256,6 +257,12 @@ func UpdateSubtask(c *gin.Context) {
 		return
 	}
 
+	// Validasi: keterangan wajib jika progress berubah
+	if request.Progress != currentSubtask.Progress && strings.TrimSpace(request.Keterangan) == "" {
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("Keterangan wajib diisi ketika mengubah progress", http.StatusBadRequest, "error", nil))
+		return
+	}
+
 	// Role check for Subtask changes
 	role := claims.Role
 	if role != "Admin" {
@@ -326,6 +333,7 @@ func UpdateSubtask(c *gin.Context) {
 		"due_date":        request.DueDate,
 		"progress":        request.Progress,
 		"done":            request.Done,
+		"keterangan":      request.Keterangan,
 	}
 
 	if err := db.Model(&models.SubTask{}).Where("id = ?", id).Updates(updateMap).Error; err != nil {
@@ -381,7 +389,11 @@ func UpdateSubtask(c *gin.Context) {
 		}
 	}
 	if request.Progress != currentSubtask.Progress {
-		createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("Updated subtask '%s' -> Progress: %d%%", request.TaskName, request.Progress))
+		if strings.TrimSpace(request.Keterangan) != "" {
+			createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("Updated subtask '%s' -> Progress: %d%% - Keterangan: %s", request.TaskName, request.Progress, request.Keterangan))
+		} else {
+			createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("Updated subtask '%s' -> Progress: %d%%", request.TaskName, request.Progress))
+		}
 	}
 	if request.Done != currentSubtask.Done {
 		logFieldChange("Subtask Done", fmt.Sprintf("%t", currentSubtask.Done), fmt.Sprintf("%t", request.Done))
