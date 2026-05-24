@@ -4,8 +4,10 @@ import (
 	"MonCR/models"
 	"MonCR/utils"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -117,6 +119,15 @@ func CreateSubtask(c *gin.Context) {
 	}
 
 	db.Preload("CR").Preload("Collaborator").First(&subtask, subtask.ID)
+
+	assigneeText := "Unassigned"
+	if subtask.Collaborator != nil && subtask.Collaborator.Fullname != "" {
+		assigneeText = subtask.Collaborator.Fullname
+	}
+	_ = assigneeText
+	if subtask.CRID != nil {
+		createChangeActivity(db, *subtask.CRID, claims.UserID, fmt.Sprintf("Added a new subtask: '%s'", subtask.TaskName))
+	}
 
 	c.JSON(http.StatusCreated, utils.FormatResponse("Subtask created successfully", http.StatusCreated, "success", subtask))
 }
@@ -249,20 +260,31 @@ func UpdateSubtask(c *gin.Context) {
 	role := claims.Role
 	if role != "Admin" {
 		if role == "Collaborator" {
-			if currentSubtask.CollaboratorID == nil || *currentSubtask.CollaboratorID != claims.UserID {
-				c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya Collaborator yang ditugaskan yang dapat mengedit subtask ini", http.StatusForbidden, "error", nil))
-				return
+			// Cek apakah collaborator mencoba melakukan self-assign (ID lama nil, ID baru adalah dirinya sendiri)
+			isSelfAssign := currentSubtask.CollaboratorID == nil && request.CollaboratorID != nil && *request.CollaboratorID == claims.UserID
+
+			if !isSelfAssign {
+				// Jika bukan self-assign, pastikan subtask ini memang miliknya
+				if currentSubtask.CollaboratorID == nil || *currentSubtask.CollaboratorID != claims.UserID {
+					c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya Collaborator yang ditugaskan atau self-assign yang dapat mengedit subtask ini", http.StatusForbidden, "error", nil))
+					return
+				}
+
+				// Jika memang miliknya (bukan sedang self-assign baru), batasi field yang boleh diubah
+				if request.TaskName != currentSubtask.TaskName || !request.DueDate.Equal(currentSubtask.DueDate) || (request.CollaboratorID != nil && *request.CollaboratorID != *currentSubtask.CollaboratorID) {
+					c.JSON(http.StatusForbidden, utils.FormatResponse("Collaborator hanya dapat mengubah progress dan status selesai", http.StatusForbidden, "error", nil))
+					return
+				}
 			}
-			// Collaborator can ONLY edit Progress and Done
-			if request.TaskName != currentSubtask.TaskName || !request.DueDate.Equal(currentSubtask.DueDate) || request.CollaboratorID != currentSubtask.CollaboratorID {
-				c.JSON(http.StatusForbidden, utils.FormatResponse("Collaborator hanya dapat mengubah progress dan status selesai", http.StatusForbidden, "error", nil))
-				return
-			}
-			allowedProgress := map[uint]bool{35: true, 75: true, 100: true}
+
+			// Validasi batasan progress untuk Collaborator
+			allowedProgress := map[uint]bool{0: true, 35: true, 70: true, 100: true}
 			if request.Progress != currentSubtask.Progress && !allowedProgress[request.Progress] {
-				c.JSON(http.StatusBadRequest, utils.FormatResponse("Progress untuk collaborator hanya 35, 75, atau 100", http.StatusBadRequest, "error", nil))
+				c.JSON(http.StatusBadRequest, utils.FormatResponse("Progress untuk collaborator hanya 0, 35, 70, atau 100", http.StatusBadRequest, "error", nil))
 				return
 			}
+
+			// Collaborator dilarang mengubah status Done secara manual, kecuali disetujui PIC melalui sistem
 			if request.Done != currentSubtask.Done {
 				c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya PIC yang dapat memindahkan subtask ke status berikutnya", http.StatusForbidden, "error", nil))
 				return
@@ -295,34 +317,77 @@ func UpdateSubtask(c *gin.Context) {
 		}
 	}
 
-	updates := models.SubTask{
-		CRID:           &request.CRID,
-		CollaboratorID: request.CollaboratorID,
-		TaskName:       request.TaskName,
-		DueDate:        request.DueDate,
-		Progress:       request.Progress,
-		Done:           request.Done,
+	// GORM mengabaikan update struct jika nilai boolean bernilai false atau pointer bernilai nil pada .Updates() struct.
+	// Kita gunakan map untuk memastikan data primitif terupdate secara eksplisit.
+	updateMap := map[string]interface{}{
+		"cr_id":           request.CRID,
+		"collaborator_id": request.CollaboratorID,
+		"task_name":       request.TaskName,
+		"due_date":        request.DueDate,
+		"progress":        request.Progress,
+		"done":            request.Done,
 	}
 
-	if err := db.Model(&models.SubTask{}).Where("id = ?", id).Updates(&updates).Error; err != nil {
+	if err := db.Model(&models.SubTask{}).Where("id = ?", id).Updates(updateMap).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to update Subtask", http.StatusInternalServerError, "error", nil))
 		return
 	}
 
 	// Catat perubahan subtask ke Activity
-	if request.Progress != currentSubtask.Progress || request.Done != currentSubtask.Done || request.TaskName != currentSubtask.TaskName {
-		statusText := "Progress: " + strconv.Itoa(int(request.Progress)) + "%"
-		if request.Done {
-			statusText = "Selesai (Done)"
+	ptrUintEqual := func(a, b *uint) bool {
+		if a == nil && b == nil {
+			return true
 		}
+		if a == nil || b == nil {
+			return false
+		}
+		return *a == *b
+	}
+	resolveUserName := func(id *uint) string {
+		if id == nil {
+			return "Unassigned"
+		}
+		var u models.Users
+		if err := db.Select("fullname").First(&u, *id).Error; err != nil || strings.TrimSpace(u.Fullname) == "" {
+			return fmt.Sprintf("User#%d", *id)
+		}
+		return u.Fullname
+	}
+	toDateStr := func(t time.Time) string {
+		return t.Format("2006-01-02")
+	}
+	logFieldChange := func(fieldName, oldValue, newValue string) {
+		createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("Changed %s from '%s' to '%s'", fieldName, oldValue, newValue))
+	}
+	resolveActorName := func(userID uint) string {
+		var u models.Users
+		if err := db.Select("fullname").First(&u, userID).Error; err != nil || strings.TrimSpace(u.Fullname) == "" {
+			return fmt.Sprintf("User#%d", userID)
+		}
+		return u.Fullname
+	}
 
-		activityLog := models.Activity{
-			CRID:       &request.CRID,
-			UserID:     &claims.UserID,
-			Action:     "Change",
-			Activities: "Update subtask '" + request.TaskName + "' -> " + statusText,
+	if request.TaskName != currentSubtask.TaskName {
+		logFieldChange("Subtask Name", currentSubtask.TaskName, request.TaskName)
+	}
+	if !request.DueDate.Equal(currentSubtask.DueDate) {
+		logFieldChange("Subtask Due Date", toDateStr(currentSubtask.DueDate), toDateStr(request.DueDate))
+	}
+	if !ptrUintEqual(currentSubtask.CollaboratorID, request.CollaboratorID) {
+		if currentSubtask.CollaboratorID == nil && request.CollaboratorID != nil && *request.CollaboratorID == claims.UserID && role == "Collaborator" {
+			createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("%s self-assigned to subtask '%s'", resolveActorName(claims.UserID), request.TaskName))
+		} else {
+			logFieldChange("Subtask Assignee", resolveUserName(currentSubtask.CollaboratorID), resolveUserName(request.CollaboratorID))
 		}
-		db.Create(&activityLog)
+	}
+	if request.Progress != currentSubtask.Progress {
+		createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("Updated subtask '%s' -> Progress: %d%%", request.TaskName, request.Progress))
+	}
+	if request.Done != currentSubtask.Done {
+		logFieldChange("Subtask Done", fmt.Sprintf("%t", currentSubtask.Done), fmt.Sprintf("%t", request.Done))
+	}
+	if !currentSubtask.Done && request.Done {
+		createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("Completed subtask '%s' -> Status: Done", request.TaskName))
 	}
 
 	updatedSubtask, _ := findSubtaskByID(db, id)
@@ -380,6 +445,10 @@ func DeleteSubtask(c *gin.Context) {
 	if err := db.Delete(subtask).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to delete Subtask", http.StatusInternalServerError, "error", nil))
 		return
+	}
+
+	if subtask.CRID != nil {
+		createChangeActivity(db, *subtask.CRID, claims.UserID, fmt.Sprintf("Deleted subtask: '%s'", subtask.TaskName))
 	}
 
 	c.JSON(http.StatusOK, utils.FormatResponse("Subtask deleted successfully", http.StatusOK, "success", nil))

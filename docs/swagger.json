@@ -325,50 +325,32 @@
                 }
             }
         },
-        "/api/cr/charts": {
+        "/api/cr/lazy": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Return chart-ready data for pie and bar charts. Optional filters: status, category, modul, from, to.",
+                "description": "Retrieve all change requests with lazy loading and pagination.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "CR"
                 ],
-                "summary": "Get CR chart analytics",
+                "summary": "Get all CRs with pagination",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Filter by status",
-                        "name": "status",
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
                         "in": "query"
                     },
                     {
-                        "type": "string",
-                        "description": "Filter by category",
-                        "name": "category",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by modul",
-                        "name": "modul",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Start date (YYYY-MM-DD or RFC3339)",
-                        "name": "from",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "End date (YYYY-MM-DD or RFC3339)",
-                        "name": "to",
+                        "type": "integer",
+                        "description": "Limit (default: 10, max: 100)",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
@@ -379,8 +361,699 @@
                             "$ref": "#/definitions/utils.APIResponse"
                         }
                     },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/lazy/approval-to-complete": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve approval to complete change requests with lazy loading pagination. Supports infinite scroll.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Get Approval to Complete CRs with pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default: 10, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/lazy/approval-to-release": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve approval to release change requests with lazy loading pagination. Supports infinite scroll.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Get Approval to Release CRs with pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default: 10, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/lazy/cancel": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve cancelled change requests with lazy loading pagination. Supports infinite scroll.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Get Cancelled CRs with pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default: 10, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/lazy/complete": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve complete change requests with lazy loading pagination. Supports infinite scroll.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Get Complete CRs with pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default: 10, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/lazy/draft": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve draft change requests with lazy loading pagination. Supports infinite scroll.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Get Draft CRs with pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default: 10, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/lazy/in-progress": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve in progress change requests with lazy loading pagination. Supports infinite scroll.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Get In Progress CRs with pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default: 10, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/lazy/issued": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve issued change requests with lazy loading pagination. Supports infinite scroll.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Get Issued CRs with pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default: 10, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/lazy/release": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve released change requests with lazy loading pagination. Supports infinite scroll.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Get Released CRs with pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default: 10, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/modul/{modul}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get paginated list of change requests filtered by modul.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "List Change Requests by modul",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "CR modul",
+                        "name": "modul",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/cr/status/{status}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get paginated list of change requests filtered by status.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "List Change Requests by status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "CR status",
+                        "name": "status",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboard/due-today": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve change requests that are due today, grouped by title, PIC, module, and status.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Charts"
+                ],
+                "summary": "Get CRs Due Today Statistics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboard/kpi-summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve key performance indicators including total CR, in-progress count, near deadline, overdue, cancelled, and completed items.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Charts"
+                ],
+                "summary": "Get KPI Summary Dashboard",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboard/lifecycle-line-chart": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve monthly progression of CRs through ISSUED, IN_PROGRESS, and COMPLETE statuses. Supports filtering by year.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Charts"
+                ],
+                "summary": "Get CR Lifecycle Line Chart",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Year filter (default: current year)",
+                        "name": "year",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboard/module-category": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve cross-tabulation of modules and categories showing the count of CRs for each combination.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Charts"
+                ],
+                "summary": "Get Module vs Category Statistics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboard/module-health-overview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve health status of each module based on overdue percentage, completion rate, and overall health scoring (Baik/Cukup/Buruk).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Charts"
+                ],
+                "summary": "Get Module Health Overview",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboard/module-status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve cross-tabulation of modules and statuses showing the count of CRs for each combination.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Charts"
+                ],
+                "summary": "Get Module vs Status Statistics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/dashboard/top-pic": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve PIC (Person In Charge) statistics sorted by CR count, including in-progress and near-deadline counts with pagination.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Charts"
+                ],
+                "summary": "Get Top PIC Statistics",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Offset (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit (default: 5, max: 5)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/utils.APIResponse"
                         }
@@ -541,6 +1214,69 @@
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/controllers.createCRRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/spr/draft": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new draft change request with minimal required fields. Only Admin can create draft CR.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CR"
+                ],
+                "summary": "Create Draft Change Request",
+                "parameters": [
+                    {
+                        "description": "Create Draft CR payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controllers.createDraftRequest"
                         }
                     }
                 ],
@@ -1339,6 +2075,10 @@
                 },
                 "cr_id": {
                     "type": "integer"
+                },
+                "reply_to_id": {
+                    "description": "Optional: for replying to activities",
+                    "type": "integer"
                 }
             }
         },
@@ -1367,7 +2107,7 @@
                         "ENHANCEMENT",
                         "FORM",
                         "CONFIGURATION",
-                        "AUTORIZATION"
+                        "AUTHORIZATION"
                     ]
                 },
                 "description": {
@@ -1424,6 +2164,72 @@
                         "COMPLETE",
                         "CANCEL"
                     ]
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 3
+                }
+            }
+        },
+        "controllers.createDraftRequest": {
+            "type": "object",
+            "required": [
+                "title"
+            ],
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "FLOW",
+                        "REPORT",
+                        "INTERFACE",
+                        "CONVERTION",
+                        "ENHANCEMENT",
+                        "FORM",
+                        "CONFIGURATION",
+                        "AUTORIZATION"
+                    ]
+                },
+                "description": {
+                    "type": "string"
+                },
+                "end_date": {
+                    "type": "string"
+                },
+                "file_attachment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "goal": {
+                    "type": "string"
+                },
+                "impact": {
+                    "type": "string"
+                },
+                "keterangan": {
+                    "type": "string"
+                },
+                "modul": {
+                    "type": "string",
+                    "enum": [
+                        "FINANCE",
+                        "MATERIAL MANAGEMENT",
+                        "HUMAN RESOURCE",
+                        "BASIS",
+                        "ABAP"
+                    ]
+                },
+                "pic_id": {
+                    "type": "integer"
+                },
+                "release_date": {
+                    "type": "string"
+                },
+                "start_date": {
+                    "type": "string"
                 },
                 "title": {
                     "type": "string",
@@ -1525,7 +2331,7 @@
                         "ENHANCEMENT",
                         "FORM",
                         "CONFIGURATION",
-                        "AUTORIZATION"
+                        "AUTHORIZATION"
                     ]
                 },
                 "description": {
@@ -1678,6 +2484,7 @@
     },
     "securityDefinitions": {
         "BearerAuth": {
+            "description": "Bearer token authentication",
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

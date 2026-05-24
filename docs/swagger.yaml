@@ -13,6 +13,9 @@ definitions:
         type: string
       cr_id:
         type: integer
+      reply_to_id:
+        description: 'Optional: for replying to activities'
+        type: integer
     required:
     - action
     - cr_id
@@ -28,7 +31,7 @@ definitions:
         - ENHANCEMENT
         - FORM
         - CONFIGURATION
-        - AUTORIZATION
+        - AUTHORIZATION
         type: string
       description:
         minLength: 3
@@ -85,6 +88,54 @@ definitions:
     - modul
     - release_date
     - start_date
+    - title
+    type: object
+  controllers.createDraftRequest:
+    properties:
+      category:
+        enum:
+        - FLOW
+        - REPORT
+        - INTERFACE
+        - CONVERTION
+        - ENHANCEMENT
+        - FORM
+        - CONFIGURATION
+        - AUTORIZATION
+        type: string
+      description:
+        type: string
+      end_date:
+        type: string
+      file_attachment:
+        items:
+          type: string
+        type: array
+      goal:
+        type: string
+      impact:
+        type: string
+      keterangan:
+        type: string
+      modul:
+        enum:
+        - FINANCE
+        - MATERIAL MANAGEMENT
+        - HUMAN RESOURCE
+        - BASIS
+        - ABAP
+        type: string
+      pic_id:
+        type: integer
+      release_date:
+        type: string
+      start_date:
+        type: string
+      title:
+        maxLength: 255
+        minLength: 3
+        type: string
+    required:
     - title
     type: object
   controllers.createSubtaskRequest:
@@ -144,7 +195,7 @@ definitions:
         - ENHANCEMENT
         - FORM
         - CONFIGURATION
-        - AUTORIZATION
+        - AUTHORIZATION
         type: string
       description:
         minLength: 3
@@ -473,40 +524,23 @@ paths:
       summary: Upload CR attachments to local storage
       tags:
       - CR
-  /api/cr/charts:
+  /api/cr/lazy:
     get:
-      description: 'Return chart-ready data for pie and bar charts. Optional filters:
-        status, category, modul, from, to.'
+      description: Retrieve all change requests with lazy loading and pagination.
       parameters:
-      - description: Filter by status
+      - description: 'Offset (default: 0)'
         in: query
-        name: status
-        type: string
-      - description: Filter by category
+        name: offset
+        type: integer
+      - description: 'Limit (default: 10, max: 100)'
         in: query
-        name: category
-        type: string
-      - description: Filter by modul
-        in: query
-        name: modul
-        type: string
-      - description: Start date (YYYY-MM-DD or RFC3339)
-        in: query
-        name: from
-        type: string
-      - description: End date (YYYY-MM-DD or RFC3339)
-        in: query
-        name: to
-        type: string
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
-          schema:
-            $ref: '#/definitions/utils.APIResponse'
-        "400":
-          description: Bad Request
           schema:
             $ref: '#/definitions/utils.APIResponse'
         "500":
@@ -515,9 +549,459 @@ paths:
             $ref: '#/definitions/utils.APIResponse'
       security:
       - BearerAuth: []
-      summary: Get CR chart analytics
+      summary: Get all CRs with pagination
       tags:
       - CR
+  /api/cr/lazy/approval-to-complete:
+    get:
+      description: Retrieve approval to complete change requests with lazy loading
+        pagination. Supports infinite scroll.
+      parameters:
+      - description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Limit (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Approval to Complete CRs with pagination
+      tags:
+      - CR
+  /api/cr/lazy/approval-to-release:
+    get:
+      description: Retrieve approval to release change requests with lazy loading
+        pagination. Supports infinite scroll.
+      parameters:
+      - description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Limit (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Approval to Release CRs with pagination
+      tags:
+      - CR
+  /api/cr/lazy/cancel:
+    get:
+      description: Retrieve cancelled change requests with lazy loading pagination.
+        Supports infinite scroll.
+      parameters:
+      - description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Limit (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Cancelled CRs with pagination
+      tags:
+      - CR
+  /api/cr/lazy/complete:
+    get:
+      description: Retrieve complete change requests with lazy loading pagination.
+        Supports infinite scroll.
+      parameters:
+      - description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Limit (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Complete CRs with pagination
+      tags:
+      - CR
+  /api/cr/lazy/draft:
+    get:
+      description: Retrieve draft change requests with lazy loading pagination. Supports
+        infinite scroll.
+      parameters:
+      - description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Limit (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Draft CRs with pagination
+      tags:
+      - CR
+  /api/cr/lazy/in-progress:
+    get:
+      description: Retrieve in progress change requests with lazy loading pagination.
+        Supports infinite scroll.
+      parameters:
+      - description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Limit (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get In Progress CRs with pagination
+      tags:
+      - CR
+  /api/cr/lazy/issued:
+    get:
+      description: Retrieve issued change requests with lazy loading pagination. Supports
+        infinite scroll.
+      parameters:
+      - description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Limit (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Issued CRs with pagination
+      tags:
+      - CR
+  /api/cr/lazy/release:
+    get:
+      description: Retrieve released change requests with lazy loading pagination.
+        Supports infinite scroll.
+      parameters:
+      - description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Limit (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Released CRs with pagination
+      tags:
+      - CR
+  /api/cr/modul/{modul}:
+    get:
+      description: Get paginated list of change requests filtered by modul.
+      parameters:
+      - description: CR modul
+        in: path
+        name: modul
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List Change Requests by modul
+      tags:
+      - CR
+  /api/cr/status/{status}:
+    get:
+      description: Get paginated list of change requests filtered by status.
+      parameters:
+      - description: CR status
+        in: path
+        name: status
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List Change Requests by status
+      tags:
+      - CR
+  /api/dashboard/due-today:
+    get:
+      description: Retrieve change requests that are due today, grouped by title,
+        PIC, module, and status.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get CRs Due Today Statistics
+      tags:
+      - Charts
+  /api/dashboard/kpi-summary:
+    get:
+      description: Retrieve key performance indicators including total CR, in-progress
+        count, near deadline, overdue, cancelled, and completed items.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get KPI Summary Dashboard
+      tags:
+      - Charts
+  /api/dashboard/lifecycle-line-chart:
+    get:
+      description: Retrieve monthly progression of CRs through ISSUED, IN_PROGRESS,
+        and COMPLETE statuses. Supports filtering by year.
+      parameters:
+      - description: 'Year filter (default: current year)'
+        in: query
+        name: year
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get CR Lifecycle Line Chart
+      tags:
+      - Charts
+  /api/dashboard/module-category:
+    get:
+      description: Retrieve cross-tabulation of modules and categories showing the
+        count of CRs for each combination.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Module vs Category Statistics
+      tags:
+      - Charts
+  /api/dashboard/module-health-overview:
+    get:
+      description: Retrieve health status of each module based on overdue percentage,
+        completion rate, and overall health scoring (Baik/Cukup/Buruk).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Module Health Overview
+      tags:
+      - Charts
+  /api/dashboard/module-status:
+    get:
+      description: Retrieve cross-tabulation of modules and statuses showing the count
+        of CRs for each combination.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Module vs Status Statistics
+      tags:
+      - Charts
+  /api/dashboard/top-pic:
+    get:
+      description: Retrieve PIC (Person In Charge) statistics sorted by CR count,
+        including in-progress and near-deadline counts with pagination.
+      parameters:
+      - description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      - description: 'Limit (default: 5, max: 5)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Top PIC Statistics
+      tags:
+      - Charts
   /api/login:
     post:
       consumes:
@@ -744,6 +1228,47 @@ paths:
       security:
       - BearerAuth: []
       summary: Update Change Request
+      tags:
+      - CR
+  /api/spr/draft:
+    post:
+      consumes:
+      - application/json
+      description: Create a new draft change request with minimal required fields.
+        Only Admin can create draft CR.
+      parameters:
+      - description: Create Draft CR payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.createDraftRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Create Draft Change Request
       tags:
       - CR
   /api/spr/export:
@@ -1106,6 +1631,7 @@ paths:
       - Users
 securityDefinitions:
   BearerAuth:
+    description: Bearer token authentication
     in: header
     name: Authorization
     type: apiKey

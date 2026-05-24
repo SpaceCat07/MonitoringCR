@@ -4,10 +4,12 @@ import (
 	"MonCR/config"
 	"MonCR/models"
 	"MonCR/utils"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -53,7 +55,7 @@ func CreateUser(c *gin.Context) {
 	var request userRequest
 
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid input data", http.StatusBadRequest, "error", err.Error()))
+		c.JSON(http.StatusBadRequest, utils.FormatResponse(friendlyValidationError(err), http.StatusBadRequest, "error", nil))
 		return
 	}
 
@@ -188,7 +190,7 @@ func UpdateUser(c *gin.Context) {
 
 	var request userRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, utils.FormatResponse("Invalid input data", http.StatusBadRequest, "error", err.Error()))
+		c.JSON(http.StatusBadRequest, utils.FormatResponse(friendlyValidationError(err), http.StatusBadRequest, "error", nil))
 		return
 	}
 
@@ -247,12 +249,58 @@ func DeleteUser(c *gin.Context) {
 		return
 	}
 
+	// Prevent deleting Admin accounts
+	if strings.EqualFold(user.Role, "Admin") {
+		c.JSON(http.StatusForbidden, utils.FormatResponse("Admin accounts cannot be deleted", http.StatusForbidden, "error", nil))
+		return
+	}
+
 	if err := db.Delete(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to delete user", http.StatusInternalServerError, "error", err.Error()))
 		return
 	}
 
 	c.JSON(http.StatusOK, utils.FormatResponse("User deleted successfully", http.StatusOK, "success", nil))
+}
+
+// friendlyValidationError converts validator errors into human-readable English messages.
+func friendlyValidationError(err error) string {
+	var ve validator.ValidationErrors
+	if !strings.Contains(fmt.Sprintf("%T", err), "ValidationErrors") {
+		// Not a validation error, return generic message
+		return "Invalid request body. Please check your input."
+	}
+	if ok := true; ok {
+		_ = ok
+	}
+	// Try type assertion
+	if errs, ok := err.(validator.ValidationErrors); ok {
+		ve = errs
+	} else {
+		return "Invalid request body. Please check your input."
+	}
+	var msgs []string
+	for _, fe := range ve {
+		field := strings.ToLower(fe.Field())
+		switch fe.Tag() {
+		case "required":
+			msgs = append(msgs, fmt.Sprintf("'%s' is required.", field))
+		case "email":
+			msgs = append(msgs, fmt.Sprintf("'%s' must be a valid email address (e.g. user@example.com).", field))
+		case "oneof":
+			msgs = append(msgs, fmt.Sprintf("'%s' must be one of: %s.", field, fe.Param()))
+		case "min":
+			msgs = append(msgs, fmt.Sprintf("'%s' must be at least %s characters.", field, fe.Param()))
+		case "max":
+			msgs = append(msgs, fmt.Sprintf("'%s' must be at most %s characters.", field, fe.Param()))
+		default:
+			msgs = append(msgs, fmt.Sprintf("'%s' is invalid.", field))
+		}
+	}
+	if len(msgs) == 0 {
+		return "Invalid input. Please check your data."
+	}
+	return strings.Join(msgs, " ")
 }
 
 
