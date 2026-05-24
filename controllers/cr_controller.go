@@ -305,6 +305,9 @@ func CreateCR(c *gin.Context) {
 // @Param status query string false "Filter by status"
 // @Param modul query string false "Filter by modul"
 // @Param category query string false "Filter by category"
+// @Param search query string false "Search by ID or title"
+// @Param id query string false "Search by ID"
+// @Param title query string false "Search by title"
 // @Success 200 {object} utils.APIResponse
 // @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
@@ -347,6 +350,21 @@ func GetCRs(c *gin.Context) {
 	}
 	if category := c.Query("category"); category != "" {
 		query = query.Where("category = ?", category)
+	}
+
+	// Search parameters
+	if search := c.Query("search"); search != "" {
+		// Search by ID or title
+		query = query.Where("id LIKE ? OR title LIKE ?", "%"+search+"%", "%"+search+"%")
+	} else {
+		// Search by specific ID
+		if id := c.Query("id"); id != "" {
+			query = query.Where("id LIKE ?", "%"+id+"%")
+		}
+		// Search by title
+		if title := c.Query("title"); title != "" {
+			query = query.Where("title LIKE ?", "%"+title+"%")
+		}
 	}
 
 	// var total int64

@@ -181,38 +181,137 @@ func getCRLazyByStatus(c *gin.Context, status string) {
     ))
 }
 
+// GetCRLazy godoc
+// @Summary Get all CRs with pagination
+// @Description Retrieve all change requests with lazy loading and pagination.
+// @Tags CR
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 10, max: 100)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/cr/lazy [get]
 func GetCRLazy(c *gin.Context) {
     getCRLazyByStatus(c, "")
 }
 
+// GetCRLazyDraft godoc
+// @Summary Get Draft CRs with pagination
+// @Description Retrieve draft change requests with lazy loading pagination. Supports infinite scroll.
+// @Tags CR
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 10, max: 100)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/cr/lazy/draft [get]
 func GetCRLazyDraft(c *gin.Context) {
     getCRLazyByStatus(c, "DRAFT")
 }
 
+// GetCRLazyIssued godoc
+// @Summary Get Issued CRs with pagination
+// @Description Retrieve issued change requests with lazy loading pagination. Supports infinite scroll.
+// @Tags CR
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 10, max: 100)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/cr/lazy/issued [get]
 func GetCRLazyIssued(c *gin.Context) {
     getCRLazyByStatus(c, "ISSUED")
 }
 
+// GetCRLazyInProgress godoc
+// @Summary Get In Progress CRs with pagination
+// @Description Retrieve in progress change requests with lazy loading pagination. Supports infinite scroll.
+// @Tags CR
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 10, max: 100)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/cr/lazy/in-progress [get]
 func GetCRLazyInProgress(c *gin.Context) {
     getCRLazyByStatus(c, "IN_PROGRESS")
 }
 
+// GetCRLazyApprovalToRelease godoc
+// @Summary Get Approval to Release CRs with pagination
+// @Description Retrieve approval to release change requests with lazy loading pagination. Supports infinite scroll.
+// @Tags CR
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 10, max: 100)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/cr/lazy/approval-to-release [get]
 func GetCRLazyApprovalToRelease(c *gin.Context) {
     getCRLazyByStatus(c, "APPROVAL_TO_RELEASE")
 }
 
+// GetCRLazyRelease godoc
+// @Summary Get Released CRs with pagination
+// @Description Retrieve released change requests with lazy loading pagination. Supports infinite scroll.
+// @Tags CR
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 10, max: 100)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/cr/lazy/release [get]
 func GetCRLazyRelease(c *gin.Context) {
     getCRLazyByStatus(c, "RELEASE")
 }
 
+// GetCRLazyApprovalToComplete godoc
+// @Summary Get Approval to Complete CRs with pagination
+// @Description Retrieve approval to complete change requests with lazy loading pagination. Supports infinite scroll.
+// @Tags CR
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 10, max: 100)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/cr/lazy/approval-to-complete [get]
 func GetCRLazyApprovalToComplete(c *gin.Context) {
     getCRLazyByStatus(c, "APPROVAL_TO_COMPLETE")
 }
 
+// GetCRLazyComplete godoc
+// @Summary Get Complete CRs with pagination
+// @Description Retrieve complete change requests with lazy loading pagination. Supports infinite scroll.
+// @Tags CR
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 10, max: 100)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/cr/lazy/complete [get]
 func GetCRLazyComplete(c *gin.Context) {
     getCRLazyByStatus(c, "COMPLETE")
 }
 
+// GetCRLazyCancel godoc
+// @Summary Get Cancelled CRs with pagination
+// @Description Retrieve cancelled change requests with lazy loading pagination. Supports infinite scroll.
+// @Tags CR
+// @Produce json
+// @Param offset query int false "Offset (default: 0)"
+// @Param limit query int false "Limit (default: 10, max: 100)"
+// @Success 200 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /api/cr/lazy/cancel [get]
 func GetCRLazyCancel(c *gin.Context) {
     getCRLazyByStatus(c, "CANCEL")
 }
