@@ -138,9 +138,9 @@ func GetActivities(c *gin.Context) {
 	query.Preload("CR").Preload("User").
 		Preload("RepliedActivity").Preload("RepliedActivity.User").
 		Preload("Replies", func(db *gorm.DB) *gorm.DB {
-			return db.Preload("User").Order("created_at ASC")
+			return db.Preload("User").Order("created_at DESC")
 		}).
-		Order("id DESC").
+		Order("created_at DESC").
 		Offset(pagination.Offset).
 		Limit(pagination.Limit).
 		Find(&activities)

@@ -701,12 +701,14 @@ func DeleteCR(c *gin.Context) {
 
 // ExportCRsPDF godoc
 // @Summary Export Change Requests to PDF
-// @Description Export change requests to PDF format.
+// @Description Export change requests to PDF format with support for deadline and PIC filters.
 // @Tags CR
 // @Produce application/pdf
 // @Param status query string false "Filter by status"
 // @Param modul query string false "Filter by modul"
 // @Param category query string false "Filter by category"
+// @Param pic_id query int false "Filter by PIC ID"
+// @Param deadline query string false "Filter by deadline (3, 7, or overdue)"
 // @Success 200 {file} file
 // @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
@@ -739,6 +741,24 @@ func ExportCRsPDF(c *gin.Context) {
 	}
 	if category := c.Query("category"); category != "" {
 		query = query.Where("category = ?", category)
+	}
+	if picID := c.Query("pic_id"); picID != "" {
+		if id, err := strconv.ParseUint(picID, 10, 32); err == nil {
+			query = query.Where("pic_id = ?", uint(id))
+		}
+	}
+	if deadline := c.Query("deadline"); deadline != "" {
+		switch deadline {
+		case "3":
+			// Due within 3 days (and not overdue)
+			query = query.Where("end_date::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 days'")
+		case "7":
+			// Due within 3-7 days
+			query = query.Where("end_date::date BETWEEN CURRENT_DATE + INTERVAL '4 days' AND CURRENT_DATE + INTERVAL '7 days'")
+		case "overdue":
+			// Already past due date
+			query = query.Where("end_date::date < CURRENT_DATE AND status NOT IN ('COMPLETE', 'CANCEL')")
+		}
 	}
 
 	var crs []models.ChangeRequest
