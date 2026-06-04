@@ -6,6 +6,7 @@ import (
 	"MonCR/utils"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -699,6 +700,209 @@ func DeleteCR(c *gin.Context) {
 	c.JSON(http.StatusOK, utils.FormatResponse("Change Request deleted successfully", http.StatusOK, "success", nil))
 }
 
+type exportCRFilters struct {
+	Status       string
+	Module       string
+	Category     string
+	Deadline     string
+	PICID        *uint
+	PICName      string
+	Year         int
+	Semester     int
+	DateFrom     time.Time
+	DateTo       time.Time
+	HasDateRange bool
+}
+
+func firstNonEmptyQuery(c *gin.Context, keys ...string) string {
+	for _, key := range keys {
+		value := strings.TrimSpace(c.Query(key))
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func normalizeExportStatus(raw string) string {
+	value := strings.ToUpper(strings.TrimSpace(raw))
+	if value == "" || value == "ALL" {
+		return ""
+	}
+	value = strings.ReplaceAll(value, "-", "_")
+	value = strings.ReplaceAll(value, " ", "_")
+	return value
+}
+
+func normalizeExportModule(raw string) string {
+	value := strings.ToUpper(strings.TrimSpace(raw))
+	if value == "" || value == "ALL" {
+		return ""
+	}
+	return value
+}
+
+func normalizeExportCategory(raw string) string {
+	value := strings.ToUpper(strings.TrimSpace(raw))
+	if value == "" || value == "ALL" {
+		return ""
+	}
+	switch value {
+	case "CONVERSION":
+		return "CONVERTION"
+	case "AUTORIZATION":
+		return "AUTHORIZATION"
+	default:
+		return value
+	}
+}
+
+func normalizeExportDeadline(raw string) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	switch value {
+	case "", "all":
+		return ""
+	case "3", "3day":
+		return "3"
+	case "7", "7day":
+		return "7"
+	case "overdue":
+		return "overdue"
+	default:
+		return ""
+	}
+}
+
+func parseExportCRFilters(c *gin.Context) (exportCRFilters, error) {
+	filters := exportCRFilters{}
+
+	filters.Status = normalizeExportStatus(firstNonEmptyQuery(c, "status"))
+	if filters.Status != "" && !isAllowedValue(filters.Status, statusOptions) {
+		return filters, fmt.Errorf("invalid status filter: %s", filters.Status)
+	}
+
+	filters.Module = normalizeExportModule(firstNonEmptyQuery(c, "modul", "module"))
+	if filters.Module != "" && !isAllowedValue(filters.Module, moduleOptions) {
+		return filters, fmt.Errorf("invalid module filter: %s", filters.Module)
+	}
+
+	filters.Category = normalizeExportCategory(firstNonEmptyQuery(c, "category"))
+	if filters.Category != "" {
+		switch filters.Category {
+		case "AUTHORIZATION", "AUTORIZATION":
+			// Allow both spellings for backward compatibility.
+		default:
+			if !isAllowedValue(filters.Category, categoryOptions) {
+				return filters, fmt.Errorf("invalid category filter: %s", filters.Category)
+			}
+		}
+	}
+
+	deadlineRaw := firstNonEmptyQuery(c, "deadline")
+	filters.Deadline = normalizeExportDeadline(deadlineRaw)
+	if strings.TrimSpace(deadlineRaw) != "" && filters.Deadline == "" {
+		return filters, fmt.Errorf("invalid deadline filter: %s", deadlineRaw)
+	}
+
+	if picIDRaw := firstNonEmptyQuery(c, "pic_id"); picIDRaw != "" {
+		parsedPICID, err := strconv.ParseUint(picIDRaw, 10, 32)
+		if err != nil || parsedPICID == 0 {
+			return filters, fmt.Errorf("invalid pic_id filter: %s", picIDRaw)
+		}
+		picID := uint(parsedPICID)
+		filters.PICID = &picID
+	}
+
+	picName := strings.TrimSpace(firstNonEmptyQuery(c, "pic_name"))
+	if !strings.EqualFold(picName, "all") {
+		filters.PICName = picName
+	}
+
+	yearRaw := firstNonEmptyQuery(c, "year")
+	if yearRaw != "" {
+		parsedYear, err := strconv.Atoi(yearRaw)
+		if err != nil || parsedYear < 2000 || parsedYear > 2100 {
+			return filters, fmt.Errorf("invalid year filter: %s", yearRaw)
+		}
+		filters.Year = parsedYear
+	}
+
+	semesterRaw := firstNonEmptyQuery(c, "semester")
+	if semesterRaw != "" {
+		parsedSemester, err := strconv.Atoi(semesterRaw)
+		if err != nil || (parsedSemester != 1 && parsedSemester != 2) {
+			return filters, fmt.Errorf("invalid semester filter: %s", semesterRaw)
+		}
+		filters.Semester = parsedSemester
+	}
+
+	if filters.Semester != 0 && filters.Year == 0 {
+		filters.Year = time.Now().Year()
+	}
+
+	if filters.Year != 0 {
+		loc := time.UTC
+		switch filters.Semester {
+		case 1:
+			filters.DateFrom = time.Date(filters.Year, time.January, 1, 0, 0, 0, 0, loc)
+			filters.DateTo = time.Date(filters.Year, time.July, 1, 0, 0, 0, 0, loc)
+		case 2:
+			filters.DateFrom = time.Date(filters.Year, time.July, 1, 0, 0, 0, 0, loc)
+			filters.DateTo = time.Date(filters.Year+1, time.January, 1, 0, 0, 0, 0, loc)
+		default:
+			filters.DateFrom = time.Date(filters.Year, time.January, 1, 0, 0, 0, 0, loc)
+			filters.DateTo = time.Date(filters.Year+1, time.January, 1, 0, 0, 0, 0, loc)
+		}
+		filters.HasDateRange = true
+	}
+
+	return filters, nil
+}
+
+func applyExportCRFilters(query *gorm.DB, filters exportCRFilters) *gorm.DB {
+	if filters.Status != "" {
+		query = query.Where("UPPER(change_requests.status) = ?", filters.Status)
+	}
+
+	if filters.Module != "" {
+		query = query.Where("UPPER(change_requests.modul) = ?", filters.Module)
+	}
+
+	if filters.Category != "" {
+		if filters.Category == "AUTHORIZATION" {
+			query = query.Where("UPPER(change_requests.category) IN ?", []string{"AUTHORIZATION", "AUTORIZATION"})
+		} else {
+			query = query.Where("UPPER(change_requests.category) = ?", filters.Category)
+		}
+	}
+
+	if filters.PICID != nil {
+		query = query.Where("change_requests.pic_id = ?", *filters.PICID)
+	} else if filters.PICName != "" {
+		query = query.Joins("LEFT JOIN users pic_users ON pic_users.id = change_requests.pic_id").
+			Where("LOWER(pic_users.fullname) = ?", strings.ToLower(filters.PICName))
+	}
+
+	switch filters.Deadline {
+	case "3":
+		query = query.Where("change_requests.end_date::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 days'")
+	case "7":
+		query = query.Where("change_requests.end_date::date > CURRENT_DATE + INTERVAL '3 days' AND change_requests.end_date::date < CURRENT_DATE + INTERVAL '7 days'")
+	case "overdue":
+		query = query.Where("change_requests.end_date::date < CURRENT_DATE")
+	}
+
+	if filters.HasDateRange {
+		query = query.Where(
+			"change_requests.start_date::date >= ?::date AND change_requests.start_date::date < ?::date",
+			filters.DateFrom.Format("2006-01-02"),
+			filters.DateTo.Format("2006-01-02"),
+		)
+	}
+
+	return query
+}
+
 // ExportCRsPDF godoc
 // @Summary Export Change Requests to PDF
 // @Description Export change requests to PDF format with support for deadline and PIC filters.
@@ -724,78 +928,170 @@ func ExportCRsPDF(c *gin.Context) {
 		return
 	}
 
-	query := db.Model(&models.ChangeRequest{})
-
-	// Role-based visibility
-	if claims.Role == "PIC" {
-		query = query.Where("pic_id = ?", claims.UserID)
-	} else if claims.Role == "Collaborator" {
-		query = query.Where("id IN (SELECT cr_id FROM sub_tasks WHERE collaborator_id = ?)", claims.UserID)
-	}
-
-	if status := c.Query("status"); status != "" {
-		query = query.Where("status = ?", status)
-	}
-	if modul := c.Query("modul"); modul != "" {
-		query = query.Where("modul = ?", modul)
-	}
-	if category := c.Query("category"); category != "" {
-		query = query.Where("category = ?", category)
-	}
-	if picID := c.Query("pic_id"); picID != "" {
-		if id, err := strconv.ParseUint(picID, 10, 32); err == nil {
-			query = query.Where("pic_id = ?", uint(id))
-		}
-	}
-	if deadline := c.Query("deadline"); deadline != "" {
-		switch deadline {
-		case "3":
-			// Due within 3 days (and not overdue)
-			query = query.Where("end_date::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 days'")
-		case "7":
-			// Due within 3-7 days
-			query = query.Where("end_date::date BETWEEN CURRENT_DATE + INTERVAL '4 days' AND CURRENT_DATE + INTERVAL '7 days'")
-		case "overdue":
-			// Already past due date
-			query = query.Where("end_date::date < CURRENT_DATE AND status NOT IN ('COMPLETE', 'CANCEL')")
-		}
-	}
-
-	var crs []models.ChangeRequest
-	if err := query.Preload("PIC").Order("id DESC").Find(&crs).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to fetch data for export", http.StatusInternalServerError, "error", nil))
+	filters, err := parseExportCRFilters(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, utils.FormatResponse(err.Error(), http.StatusBadRequest, "error", nil))
 		return
 	}
 
-	// Use A3 Landscape (420 x 297 mm) to fit many columns
-	pdf := gofpdf.New("L", "mm", "A3", "")
-	pdf.AddPage()
-	pdf.SetFont("Arial", "B", 14)
-	pdf.Cell(0, 10, "Laporan Data Change Request (CR)")
-	pdf.Ln(12)
+	query := db.Model(&models.ChangeRequest{}).Where("change_requests.deleted_at IS NULL")
 
-	// Table Header
-	pdf.SetFont("Arial", "B", 10)
-	widths := []float64{10, 40, 60, 60, 60, 35, 35, 30, 40, 25}
-	headers := []string{"ID", "Judul", "Deskripsi", "Goal", "Impact", "Modul", "Kategori", "Status", "PIC", "Mulai"}
-
-	for i, h := range headers {
-		pdf.CellFormat(widths[i], 10, h, "1", 0, "C", false, 0, "")
+	// Role-based visibility
+	if claims.Role == "PIC" {
+		query = query.Where("change_requests.pic_id = ?", claims.UserID)
+	} else if claims.Role == "Collaborator" {
+		var user models.Users
+		if err := db.Select("parent_pic").First(&user, claims.UserID).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to resolve collaborator parent PIC", http.StatusInternalServerError, "error", err.Error()))
+			return
+		}
+		if user.ParentPIC == nil {
+			query = query.Where("1 = 0")
+		} else {
+			query = query.Where("change_requests.pic_id = ?", *user.ParentPIC)
+		}
 	}
-	pdf.Ln(-1)
 
-	// Table Body
-	pdf.SetFont("Arial", "", 9)
-	for _, cr := range crs {
-		var maxLines int = 1
+	query = applyExportCRFilters(query, filters)
 
+	var totalMatched int64
+	if err := query.Count(&totalMatched).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to count export data", http.StatusInternalServerError, "error", err.Error()))
+		return
+	}
+	log.Printf("[ExportCRsPDF] user_id=%d role=%s filters=%+v total_matched=%d", claims.UserID, claims.Role, filters, totalMatched)
+
+	var crs []models.ChangeRequest
+	if err := query.
+		Preload("PIC").
+		Order("change_requests.start_date ASC, change_requests.id ASC").
+		Find(&crs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, utils.FormatResponse("Failed to fetch data for export", http.StatusInternalServerError, "error", nil))
+		return
+	}
+	log.Printf("[ExportCRsPDF] user_id=%d exported_rows=%d", claims.UserID, len(crs))
+
+	pdf := gofpdf.New("L", "mm", "A4", "")
+	pdf.SetMargins(10, 10, 10)
+	pdf.SetAutoPageBreak(true, 10)
+	pdf.AliasNbPages("{nb}")
+	leftMargin, _, _, _ := pdf.GetMargins()
+	pdf.SetFooterFunc(func() {
+		pdf.SetY(-8)
+		pdf.SetFont("Arial", "", 7)
+		pdf.SetTextColor(100, 100, 100)
+		pdf.CellFormat(0, 4, fmt.Sprintf("Page %d/{nb}", pdf.PageNo()), "", 0, "R", false, 0, "")
+	})
+
+	valueOrAll := func(v string) string {
+		if strings.TrimSpace(v) == "" {
+			return "All"
+		}
+		return v
+	}
+
+	semesterLabel := "All"
+	switch filters.Semester {
+	case 1:
+		semesterLabel = "Semester 1 (Jan-Jun)"
+	case 2:
+		semesterLabel = "Semester 2 (Jul-Dec)"
+	default:
+		if filters.Year != 0 {
+			semesterLabel = "Full Year"
+		}
+	}
+
+	yearLabel := "All"
+	if filters.Year != 0 {
+		yearLabel = strconv.Itoa(filters.Year)
+	}
+
+	statusLabel := valueOrAll(filters.Status)
+	moduleLabel := valueOrAll(filters.Module)
+	categoryLabel := valueOrAll(filters.Category)
+	picLabel := "All"
+	if filters.PICID != nil {
+		picLabel = fmt.Sprintf("PIC ID %d", *filters.PICID)
+	} else if strings.TrimSpace(filters.PICName) != "" {
+		picLabel = filters.PICName
+	}
+	deadlineLabel := valueOrAll(filters.Deadline)
+
+	exportedAt := time.Now()
+
+	headers := []string{
+		"No",
+		"CR ID",
+		"Title",
+		"Description",
+		"Goal",
+		"Impact",
+		"Module",
+		"Category",
+		"Status",
+		"PIC",
+		"Start",
+		"End",
+	}
+	widths := []float64{8, 16, 34, 40, 30, 30, 22, 22, 20, 25, 15, 15}
+	lineHeight := 3.6
+	leftPad := 0.9
+	topPad := 0.6
+
+	renderTableHeader := func() {
+		pdf.SetFont("Arial", "B", 7.5)
+		pdf.SetFillColor(230, 236, 244)
+		pdf.SetTextColor(30, 41, 59)
+		for i, header := range headers {
+			pdf.CellFormat(widths[i], 6.8, header, "1", 0, "C", true, 0, "")
+		}
+		pdf.Ln(-1)
+	}
+
+	renderPageSection := func(showSummary bool) {
+		pdf.SetTextColor(20, 20, 20)
+		pdf.SetFont("Arial", "B", 12)
+		pdf.CellFormat(0, 6.2, "Change Request Export Report", "", 1, "L", false, 0, "")
+		pdf.SetFont("Arial", "", 8)
+		pdf.CellFormat(0, 4.2, fmt.Sprintf("Export Date: %s", exportedAt.Format("2006-01-02 15:04:05")), "", 1, "L", false, 0, "")
+		if showSummary {
+			summary := []struct {
+				label string
+				value string
+			}{
+				{label: "Year", value: yearLabel},
+				{label: "Semester", value: semesterLabel},
+				{label: "Module", value: moduleLabel},
+				{label: "Category", value: categoryLabel},
+				{label: "PIC", value: picLabel},
+				{label: "Status", value: statusLabel},
+				{label: "Deadline", value: deadlineLabel},
+				{label: "Total Data Exported", value: strconv.Itoa(len(crs))},
+			}
+			for _, row := range summary {
+				pdf.SetFont("Arial", "B", 8)
+				pdf.CellFormat(38, 4.1, row.label+":", "", 0, "L", false, 0, "")
+				pdf.SetFont("Arial", "", 8)
+				pdf.CellFormat(0, 4.1, row.value, "", 1, "L", false, 0, "")
+			}
+		}
+		pdf.Ln(1.5)
+		renderTableHeader()
+	}
+
+	pdf.AddPage()
+	renderPageSection(true)
+
+	for idx, cr := range crs {
 		picName := "-"
-		if cr.PIC != nil {
-			picName = cr.PIC.Fullname
+		if cr.PIC != nil && strings.TrimSpace(cr.PIC.Fullname) != "" {
+			picName = strings.TrimSpace(cr.PIC.Fullname)
 		}
 
-		texts := []string{
-			strconv.Itoa(int(cr.ID)),
+		row := []string{
+			strconv.Itoa(idx + 1),
+			fmt.Sprintf("CR-%04d", cr.ID),
 			cr.Title,
 			cr.Description,
 			cr.Goal,
@@ -805,37 +1101,83 @@ func ExportCRsPDF(c *gin.Context) {
 			cr.Status,
 			picName,
 			cr.StartDate.Format("2006-01-02"),
+			cr.EndDate.Format("2006-01-02"),
 		}
 
-		// Calculate row height
-		for i, text := range texts {
-			lines := pdf.SplitText(text, widths[i]-2)
+		maxLines := 1
+		for i, text := range row {
+			safeText := strings.TrimSpace(text)
+			if safeText == "" {
+				safeText = "-"
+			}
+			lines := pdf.SplitText(safeText, widths[i]-(leftPad*2))
+			if len(lines) == 0 {
+				lines = []string{safeText}
+			}
 			if len(lines) > maxLines {
 				maxLines = len(lines)
 			}
 		}
 
-		h := float64(maxLines) * 5.0
+		rowHeight := float64(maxLines)*lineHeight + (topPad * 2)
 
-		// Add new page if row exceeds page bottom
-		_, pageY := pdf.GetXY()
-		_, _, _, marginB := pdf.GetMargins()
-		pageH, _ := pdf.GetPageSize()
-		if pageY+h > pageH-marginB {
+		currentX, currentY := pdf.GetXY()
+		_, pageHeight := pdf.GetPageSize()
+		_, _, _, marginBottom := pdf.GetMargins()
+		if currentY+rowHeight > pageHeight-marginBottom {
 			pdf.AddPage()
+			renderPageSection(false)
+			currentX, currentY = pdf.GetXY()
 		}
 
-		x, y := pdf.GetXY()
-		for i, text := range texts {
-			pdf.Rect(x, y, widths[i], h, "D")
-			pdf.MultiCell(widths[i], 5.0, text, "", "L", false)
-			x += widths[i]
-			pdf.SetXY(x, y)
+		if idx%2 == 1 {
+			pdf.SetFillColor(249, 250, 251)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
 		}
-		pdf.Ln(h)
+
+		for i, text := range row {
+			safeText := strings.TrimSpace(text)
+			if safeText == "" {
+				safeText = "-"
+			}
+
+			cellX := currentX
+			cellY := currentY
+
+			pdf.Rect(cellX, cellY, widths[i], rowHeight, "F")
+			pdf.Rect(cellX, cellY, widths[i], rowHeight, "D")
+
+			align := "L"
+			switch i {
+			case 0:
+				align = "C"
+			case 1:
+				align = "C"
+			case 10, 11:
+				align = "C"
+			}
+
+			pdf.SetXY(cellX+leftPad, cellY+topPad)
+			pdf.SetFont("Arial", "", 7.3)
+			pdf.SetTextColor(31, 41, 55)
+			pdf.MultiCell(widths[i]-(leftPad*2), lineHeight, safeText, "", align, false)
+
+			currentX += widths[i]
+			pdf.SetXY(currentX, currentY)
+		}
+
+		pdf.SetXY(leftMargin, currentY+rowHeight)
 	}
 
-	c.Header("Content-Disposition", "attachment; filename=change_requests.pdf")
+	filename := "change_requests.pdf"
+	if filters.Year != 0 && filters.Semester != 0 {
+		filename = fmt.Sprintf("change_requests_%d_semester_%d.pdf", filters.Year, filters.Semester)
+	} else if filters.Year != 0 {
+		filename = fmt.Sprintf("change_requests_%d.pdf", filters.Year)
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Header("Content-Type", "application/pdf")
 
 	if err := pdf.Output(c.Writer); err != nil {

@@ -550,7 +550,7 @@ func LifecycleLineChart(c *gin.Context) {
 			"labels": monthLabels,
 			"series": []LifecycleSeries{
 				{Name: "ISSUED", Data: issuedData},
-				{Name: "IN_PROGRESS", Data: inProgressData},
+				{Name: "IN PROGRESS", Data: inProgressData},
 				{Name: "COMPLETE", Data: completeData},
 			},
 		},
