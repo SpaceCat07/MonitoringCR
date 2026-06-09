@@ -1,24 +1,30 @@
-# MonitoringCR API
+# MonitoringCR
 
-Backend API untuk autentikasi user untuk Monitoring CR
+MonitoringCR adalah backend service berbasis Go untuk mengelola Change Request, activity, subtask, user, dashboard statistik, upload attachment, dan autentikasi JWT.
+
+## Ringkasan Fitur
+
+- Login user dengan JWT
+- Middleware autentikasi dan role based access
+- Manajemen Change Request
+- Manajemen subtask dan activity
+- Statistik dashboard dan chart
+- Upload attachment ke storage lokal
+- Export CR ke PDF
+- Swagger UI untuk dokumentasi API
+- CORS aktif
+- Seeder user awal saat database kosong
 
 ## Tech Stack
 
-- Go
-- Gin (`github.com/gin-gonic/gin`)
-- GORM (`gorm.io/gorm`)
-- PostgreSQL (`gorm.io/driver/postgres`)
-- JWT (`github.com/golang-jwt/jwt/v5`)
-- Godotenv (`github.com/joho/godotenv`)
-
-## Fitur
-
-- Register user
-- Login user
-- Generate JWT saat login
-- Middleware proteksi endpoint dengan `Authorization: Bearer <token>`
-- Auto-migrate tabel `users`
-- CORS aktif
+- Go 1.25
+- Gin
+- GORM
+- PostgreSQL
+- JWT
+- Swagger / Swaggo
+- CORS middleware
+- Rate limiter in-memory per user
 
 ## Struktur Project
 
@@ -27,117 +33,155 @@ Backend API untuk autentikasi user untuk Monitoring CR
 |-- config/
 |   `-- db.go
 |-- controllers/
-|   `-- auth_controller.go
+|-- docs/
 |-- middleware/
-|   `-- auth_middleware.go
 |-- models/
-|   `-- users.go
 |-- routes/
-|   `-- route.go
+|-- uploads/
 |-- utils/
-|   `-- helperjwt.go
-|-- .env.example
+|-- Dockerfile
+|-- docker-compose.yml
 |-- go.mod
-|-- go.sum
-`-- main.go
+|-- main.go
+`-- README.md
 ```
 
 ## Prasyarat
 
 - Go terpasang
 - PostgreSQL berjalan
+- File `.env` di root project
 
 ## Konfigurasi Environment
 
-Buat file `.env` di root project dan isi seperti contoh berikut:
+Buat file `.env` di root project, lalu isi seperti contoh berikut:
 
 ```env
-# Database PostgreSQL
 DB_HOST=localhost
 DB_PORT=5433
 DB_USER=postgres
 DB_PASSWORD=1234
 DB_NAME=monitoringcr
 
-# JWT
-JWT_SECRET=jdsklfjdskajflkasjfdskafdlaskfdjkslafjdslka
+JWT_SECRET=isi_dengan_secret_yang_kuat_dan_panjang
 ```
 
 ## Menjalankan Project
+
+### Jalankan lokal
 
 ```bash
 go mod tidy
 go run main.go
 ```
 
-Server berjalan default di:
+### Jalankan dengan Docker
+
+```bash
+docker compose up --build
+```
+
+Server berjalan pada:
 
 ```text
 http://localhost:8080
 ```
 
-## API Endpoints
+## Endpoint Utama
 
 Base URL: `http://localhost:8080`
 
 ### Public
 
-1. `POST /api/register`
+- `POST /api/login`
+- `GET /api/roles`
+- `GET /oke`
+- `GET /swagger/*any`
 
-Body JSON:
+### Protected dengan JWT
 
-```json
-{
-  "fullname": "John Doe",
-  "email": "john@example.com",
-  "password": "rahasia123"
-}
-```
+- `GET /api/cek`
+- `GET /api/cr/options`
+- `GET /api/cr/charts`
+- `GET /api/cr/export`
+- `GET /api/cr/status/:status`
+- `GET /api/cr/modul/:modul`
+- `POST /api/cr/attachments/upload`
+- `POST /api/cr/draft`
+- `POST /api/cr`
+- `GET /api/cr`
+- `GET /api/cr/:id`
+- `PUT /api/cr/:id`
+- `DELETE /api/cr/:id`
+- `GET /api/subtasks`
+- `POST /api/subtasks`
+- `GET /api/subtasks/:id`
+- `PUT /api/subtasks/:id`
+- `DELETE /api/subtasks/:id`
+- `GET /api/activities`
+- `POST /api/activities`
+- `GET /api/activities/:id`
+- `PUT /api/activities/:id`
+- `DELETE /api/activities/:id`
+- `GET /api/collaborator/:PIC_ID`
+- `GET /api/dashboard/kpi-summary`
+- `GET /api/dashboard/top-pic`
+- `GET /api/dashboard/due-today`
+- `GET /api/dashboard/module-category`
+- `GET /api/dashboard/module-status`
+- `GET /api/dashboard/module-health-overview`
+- `GET /api/dashboard/lifecycle-line-chart`
+- `GET /api/cr/lazy/draft`
+- `GET /api/cr/lazy/issued`
+- `GET /api/cr/lazy/in-progress`
+- `GET /api/cr/lazy/approval-to-release`
+- `GET /api/cr/lazy/release`
+- `GET /api/cr/lazy/approval-to-complete`
+- `GET /api/cr/lazy/complete`
+- `GET /api/cr/lazy/cancel`
 
-2. `POST /api/login`
+### Protected Khusus Admin
 
-Body JSON:
+- `POST /api/users`
+- `GET /api/users`
+- `GET /api/users/:id`
+- `PUT /api/users/:id`
+- `DELETE /api/users/:id`
 
-```json
-{
-  "email": "john@example.com",
-  "password": "rahasia123"
-}
-```
+## Autentikasi
 
-Contoh response sukses:
-
-```json
-{
-  "success": true,
-  "message": "Login successful",
-  "data": {
-    "id": 1,
-    "full_name": "John Doe"
-  },
-  "token": "<jwt_token>"
-}
-```
-
-### Protected (Wajib JWT)
-
-1. `GET /api/cek`
-
-Header wajib:
+Semua endpoint protected wajib menyertakan header berikut:
 
 ```http
 Authorization: Bearer <jwt_token>
 ```
 
-Jika token valid: endpoint dapat diakses.
-Jika token tidak valid/tidak ada: response `401 Unauthorized`.
+## Seeder Default
 
-### Health Check
+Saat tabel user masih kosong, aplikasi akan menambahkan data awal berikut:
 
-1. `GET /oke`
+- `admin@mail.com / admin123` dengan role `Admin`
+- `manager@mail.com / manager123` dengan role `Manager`
+- `pic@mail.com / pic123` dengan role `PIC`
+- `collaborator@mail.com / collaborator123` dengan role `Collaborator`
+
+## Database
+
+Saat aplikasi berjalan, koneksi database akan:
+
+- melakukan auto migrate untuk tabel user, change request, activity, dan subtask
+- mengatur connection pool agar lebih stabil
+
+## Swagger
+
+Dokumentasi API tersedia di:
+
+```text
+/swagger/index.html
+```
 
 ## Catatan
 
-- `DBConnect()` melakukan `AutoMigrate(&models.Users{})` saat aplikasi berjalan.
-- Pastikan `.env` di-ignore dari Git dan hanya commit `.env.example`.
-- Untuk production, gunakan nilai `JWT_SECRET` yang kuat dan acak (minimal 32 karakter).
+- Folder `uploads/` dipakai untuk file attachment lokal.
+- Rate limiter berbasis memory server, jadi cocok untuk 1 instance aplikasi.
+- Gunakan `JWT_SECRET` yang kuat untuk environment production.
