@@ -30,6 +30,7 @@ type updateSubtaskRequest struct {
 	DueDate        time.Time `json:"due_date" binding:"required"`
 	Progress       uint      `json:"progress" binding:"omitempty,max=100"`
 	Done           bool      `json:"done" binding:"omitempty"`
+	Keterangan     string    `json:"keterangan" binding:"omitempty"`
 }
 
 func parseSubtaskID(c *gin.Context) (uint, bool) {
@@ -256,6 +257,42 @@ func UpdateSubtask(c *gin.Context) {
 		return
 	}
 
+	ptrUintEqual := func(a, b *uint) bool {
+		if a == nil && b == nil {
+			return true
+		}
+		if a == nil || b == nil {
+			return false
+		}
+		return *a == *b
+	}
+	toDateStr := func(t time.Time) string {
+		return t.Format("2006-01-02")
+	}
+
+	isProgressChanged := request.Progress != currentSubtask.Progress
+	isDueDateChanged := toDateStr(request.DueDate) != toDateStr(currentSubtask.DueDate)
+	isAssigneeChanged := !ptrUintEqual(currentSubtask.CollaboratorID, request.CollaboratorID)
+	autoDoneByProgress := isProgressChanged && request.Progress == 100
+
+	// Progress must be monotonic (cannot be decreased).
+	if request.Progress < currentSubtask.Progress {
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("Progress cannot be decreased. Progress must be equal to or greater than the previous progress.", http.StatusBadRequest, "error", nil))
+		return
+	}
+
+	// Business rule: when progress reaches 100 in this update, Done is forced to true.
+	effectiveDone := request.Done
+	if autoDoneByProgress {
+		effectiveDone = true
+	}
+
+	// Validasi: keterangan wajib jika progress berubah
+	if isProgressChanged && strings.TrimSpace(request.Keterangan) == "" {
+		c.JSON(http.StatusBadRequest, utils.FormatResponse("Progress reason is required when updating progress", http.StatusBadRequest, "error", nil))
+		return
+	}
+
 	// Role check for Subtask changes
 	role := claims.Role
 	if role != "Admin" {
@@ -271,21 +308,21 @@ func UpdateSubtask(c *gin.Context) {
 				}
 
 				// Jika memang miliknya (bukan sedang self-assign baru), batasi field yang boleh diubah
-				if request.TaskName != currentSubtask.TaskName || !request.DueDate.Equal(currentSubtask.DueDate) || (request.CollaboratorID != nil && *request.CollaboratorID != *currentSubtask.CollaboratorID) {
+				if request.TaskName != currentSubtask.TaskName || isDueDateChanged || isAssigneeChanged {
 					c.JSON(http.StatusForbidden, utils.FormatResponse("Collaborator hanya dapat mengubah progress dan status selesai", http.StatusForbidden, "error", nil))
 					return
 				}
 			}
 
-			// Validasi batasan progress untuk Collaborator
-			allowedProgress := map[uint]bool{0: true, 35: true, 70: true, 100: true}
-			if request.Progress != currentSubtask.Progress && !allowedProgress[request.Progress] {
-				c.JSON(http.StatusBadRequest, utils.FormatResponse("Progress untuk collaborator hanya 0, 35, 70, atau 100", http.StatusBadRequest, "error", nil))
+			// Collaborator can update progress with any value between 0 and 100.
+			if request.Progress > 100 {
+				c.JSON(http.StatusBadRequest, utils.FormatResponse("Progress must be between 0 and 100", http.StatusBadRequest, "error", nil))
 				return
 			}
 
-			// Collaborator dilarang mengubah status Done secara manual, kecuali disetujui PIC melalui sistem
-			if request.Done != currentSubtask.Done {
+			// Collaborator dilarang mengubah status Done secara manual.
+			// Exception: when progress becomes 100 in the same action, Done may change automatically.
+			if request.Done != currentSubtask.Done && !autoDoneByProgress {
 				c.JSON(http.StatusForbidden, utils.FormatResponse("Hanya PIC yang dapat memindahkan subtask ke status berikutnya", http.StatusForbidden, "error", nil))
 				return
 			}
@@ -325,7 +362,7 @@ func UpdateSubtask(c *gin.Context) {
 		"task_name":       request.TaskName,
 		"due_date":        request.DueDate,
 		"progress":        request.Progress,
-		"done":            request.Done,
+		"done":            effectiveDone,
 	}
 
 	if err := db.Model(&models.SubTask{}).Where("id = ?", id).Updates(updateMap).Error; err != nil {
@@ -333,16 +370,7 @@ func UpdateSubtask(c *gin.Context) {
 		return
 	}
 
-	// Catat perubahan subtask ke Activity
-	ptrUintEqual := func(a, b *uint) bool {
-		if a == nil && b == nil {
-			return true
-		}
-		if a == nil || b == nil {
-			return false
-		}
-		return *a == *b
-	}
+	// Catat perubahan subtask ke Activity (single consolidated entry per action)
 	resolveUserName := func(id *uint) string {
 		if id == nil {
 			return "Unassigned"
@@ -353,41 +381,49 @@ func UpdateSubtask(c *gin.Context) {
 		}
 		return u.Fullname
 	}
-	toDateStr := func(t time.Time) string {
-		return t.Format("2006-01-02")
-	}
-	logFieldChange := func(fieldName, oldValue, newValue string) {
-		createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("Changed %s from '%s' to '%s'", fieldName, oldValue, newValue))
-	}
-	resolveActorName := func(userID uint) string {
-		var u models.Users
-		if err := db.Select("fullname").First(&u, userID).Error; err != nil || strings.TrimSpace(u.Fullname) == "" {
-			return fmt.Sprintf("User#%d", userID)
-		}
-		return u.Fullname
-	}
+	reasonText := strings.TrimSpace(request.Keterangan)
+	isDoneChanged := effectiveDone != currentSubtask.Done
+	hasNonProgressFieldChanges := request.TaskName != currentSubtask.TaskName || isDueDateChanged || isAssigneeChanged || (isDoneChanged && !autoDoneByProgress)
+	shouldLogProgressActivity := isProgressChanged || (reasonText != "" && !hasNonProgressFieldChanges)
 
-	if request.TaskName != currentSubtask.TaskName {
-		logFieldChange("Subtask Name", currentSubtask.TaskName, request.TaskName)
-	}
-	if !request.DueDate.Equal(currentSubtask.DueDate) {
-		logFieldChange("Subtask Due Date", toDateStr(currentSubtask.DueDate), toDateStr(request.DueDate))
-	}
-	if !ptrUintEqual(currentSubtask.CollaboratorID, request.CollaboratorID) {
-		if currentSubtask.CollaboratorID == nil && request.CollaboratorID != nil && *request.CollaboratorID == claims.UserID && role == "Collaborator" {
-			createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("%s self-assigned to subtask '%s'", resolveActorName(claims.UserID), request.TaskName))
-		} else {
-			logFieldChange("Subtask Assignee", resolveUserName(currentSubtask.CollaboratorID), resolveUserName(request.CollaboratorID))
+	if shouldLogProgressActivity {
+		progressLog := fmt.Sprintf("Updated subtask '%s' -> Progress: %d%%", request.TaskName, request.Progress)
+		if request.Progress == 100 && effectiveDone {
+			progressLog += " (Done)"
 		}
-	}
-	if request.Progress != currentSubtask.Progress {
-		createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("Updated subtask '%s' -> Progress: %d%%", request.TaskName, request.Progress))
-	}
-	if request.Done != currentSubtask.Done {
-		logFieldChange("Subtask Done", fmt.Sprintf("%t", currentSubtask.Done), fmt.Sprintf("%t", request.Done))
-	}
-	if !currentSubtask.Done && request.Done {
-		createChangeActivity(db, request.CRID, claims.UserID, fmt.Sprintf("Completed subtask '%s' -> Status: Done", request.TaskName))
+		if reasonText != "" {
+			progressLog = fmt.Sprintf("%s\n\nKeterangan:\n%s", progressLog, reasonText)
+		}
+		createChangeActivity(db, request.CRID, claims.UserID, progressLog)
+	} else {
+		changeParts := make([]string, 0, 4)
+
+		if request.TaskName != currentSubtask.TaskName {
+			changeParts = append(changeParts, fmt.Sprintf("Name: '%s' -> '%s'", currentSubtask.TaskName, request.TaskName))
+		}
+
+		if isDueDateChanged {
+			changeParts = append(changeParts, fmt.Sprintf("Due Date: %s -> %s", toDateStr(currentSubtask.DueDate), toDateStr(request.DueDate)))
+		}
+
+		if isAssigneeChanged {
+			oldAssignee := resolveUserName(currentSubtask.CollaboratorID)
+			newAssignee := resolveUserName(request.CollaboratorID)
+			assigneePart := fmt.Sprintf("Assignee: '%s' -> '%s'", oldAssignee, newAssignee)
+			if currentSubtask.CollaboratorID == nil && request.CollaboratorID != nil && *request.CollaboratorID == claims.UserID && role == "Collaborator" {
+				assigneePart += " (self-assigned)"
+			}
+			changeParts = append(changeParts, assigneePart)
+		}
+
+		if isDoneChanged && !autoDoneByProgress {
+			changeParts = append(changeParts, fmt.Sprintf("Done: %t -> %t", currentSubtask.Done, effectiveDone))
+		}
+
+		if len(changeParts) > 0 {
+			activityLog := fmt.Sprintf("Updated subtask '%s' -> %s", request.TaskName, strings.Join(changeParts, " | "))
+			createChangeActivity(db, request.CRID, claims.UserID, activityLog)
+		}
 	}
 
 	updatedSubtask, _ := findSubtaskByID(db, id)
