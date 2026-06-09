@@ -1,19 +1,22 @@
 # MonitoringCR
 
-MonitoringCR adalah backend service berbasis Go untuk mengelola Change Request, activity, subtask, user, dashboard statistik, upload attachment, dan autentikasi JWT.
+MonitoringCR adalah backend service berbasis Go untuk mengelola Change Request, activity, subtask, user, statistik dashboard, attachment file, dan autentikasi JWT.
 
-## Ringkasan Fitur
+## Fitur Utama
 
 - Login user dengan JWT
-- Middleware autentikasi dan role based access
-- Manajemen Change Request
-- Manajemen subtask dan activity
-- Statistik dashboard dan chart
+- Role based access untuk endpoint admin
+- CRUD Change Request
+- CRUD subtask
+- CRUD activity
+- Dashboard KPI dan chart
+- Endpoint lazy load per status CR
 - Upload attachment ke storage lokal
-- Export CR ke PDF
+- Export Change Request ke PDF
 - Swagger UI untuk dokumentasi API
+- Seeder user default saat database masih kosong
 - CORS aktif
-- Seeder user awal saat database kosong
+- Rate limit per user berbasis memory
 
 ## Tech Stack
 
@@ -22,16 +25,15 @@ MonitoringCR adalah backend service berbasis Go untuk mengelola Change Request, 
 - GORM
 - PostgreSQL
 - JWT
-- Swagger / Swaggo
-- CORS middleware
-- Rate limiter in-memory per user
+- Swaggo / Swagger
+- gin-contrib/cors
+- golang.org/x/time untuk rate limiter
 
 ## Struktur Project
 
 ```text
 .
 |-- config/
-|   `-- db.go
 |-- controllers/
 |-- docs/
 |-- middleware/
@@ -48,13 +50,13 @@ MonitoringCR adalah backend service berbasis Go untuk mengelola Change Request, 
 
 ## Prasyarat
 
-- Go terpasang
-- PostgreSQL berjalan
-- File `.env` di root project
+- Go sudah terpasang
+- PostgreSQL aktif
+- File `.env` tersedia di root project
 
 ## Konfigurasi Environment
 
-Buat file `.env` di root project, lalu isi seperti contoh berikut:
+Buat file `.env` di root project dengan isi seperti berikut:
 
 ```env
 DB_HOST=localhost
@@ -81,24 +83,30 @@ go run main.go
 docker compose up --build
 ```
 
-Server berjalan pada:
+Server akan berjalan di:
 
 ```text
 http://localhost:8080
 ```
 
-## Endpoint Utama
+## Endpoint
 
 Base URL: `http://localhost:8080`
 
-### Public
+### Public Endpoint
 
 - `POST /api/login`
 - `GET /api/roles`
 - `GET /oke`
 - `GET /swagger/*any`
 
-### Protected dengan JWT
+### Protected Endpoint
+
+Semua endpoint berikut wajib memakai header:
+
+```http
+Authorization: Bearer <jwt_token>
+```
 
 - `GET /api/cek`
 - `GET /api/cr/options`
@@ -140,7 +148,7 @@ Base URL: `http://localhost:8080`
 - `GET /api/cr/lazy/complete`
 - `GET /api/cr/lazy/cancel`
 
-### Protected Khusus Admin
+### Endpoint Khusus Admin
 
 - `POST /api/users`
 - `GET /api/users`
@@ -148,17 +156,30 @@ Base URL: `http://localhost:8080`
 - `PUT /api/users/:id`
 - `DELETE /api/users/:id`
 
-## Autentikasi
+## Login
 
-Semua endpoint protected wajib menyertakan header berikut:
+Request body login:
 
-```http
-Authorization: Bearer <jwt_token>
+```json
+{
+	"email": "admin@mail.com",
+	"password": "admin123"
+}
+```
+
+## Upload Attachment
+
+Endpoint upload menerima multipart form-data dengan key `files`.
+
+Contoh:
+
+```bash
+POST /api/cr/attachments/upload
 ```
 
 ## Seeder Default
 
-Saat tabel user masih kosong, aplikasi akan menambahkan data awal berikut:
+Jika tabel user masih kosong, aplikasi akan membuat user awal berikut:
 
 - `admin@mail.com / admin123` dengan role `Admin`
 - `manager@mail.com / manager123` dengan role `Manager`
@@ -167,14 +188,14 @@ Saat tabel user masih kosong, aplikasi akan menambahkan data awal berikut:
 
 ## Database
 
-Saat aplikasi berjalan, koneksi database akan:
+Saat aplikasi dijalankan, database akan:
 
-- melakukan auto migrate untuk tabel user, change request, activity, dan subtask
-- mengatur connection pool agar lebih stabil
+- auto migrate tabel users, change requests, activities, dan subtasks
+- menggunakan connection pool agar lebih stabil
 
 ## Swagger
 
-Dokumentasi API tersedia di:
+Dokumentasi API bisa dibuka di:
 
 ```text
 /swagger/index.html
@@ -182,6 +203,6 @@ Dokumentasi API tersedia di:
 
 ## Catatan
 
-- Folder `uploads/` dipakai untuk file attachment lokal.
-- Rate limiter berbasis memory server, jadi cocok untuk 1 instance aplikasi.
-- Gunakan `JWT_SECRET` yang kuat untuk environment production.
+- Folder `uploads/` digunakan sebagai storage file lokal dan disajikan lewat route `/uploads`.
+- Rate limiter menyimpan data di memory server, jadi cocok untuk satu instance aplikasi.
+- Gunakan `JWT_SECRET` yang panjang dan acak untuk environment production.
